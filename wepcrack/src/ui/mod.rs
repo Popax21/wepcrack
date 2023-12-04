@@ -6,7 +6,8 @@ pub trait UIApp {
 }
 
 pub trait UIScene {
-    fn draw_ui(&self, frame: &mut Frame);
+    fn should_quit(&self) -> bool;
+    fn draw_ui(&mut self, frame: &mut Frame);
     fn handle_event(&mut self, event: &Event);
 }
 

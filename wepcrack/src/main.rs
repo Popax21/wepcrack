@@ -3,18 +3,35 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
+use rand::RngCore;
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use std::{
     error::Error,
-    sync::{atomic, Arc},
+    sync::{
+        atomic::{self, AtomicBool},
+        Arc,
+    },
     time::Duration,
 };
 use ui::UIScene;
 
+use crate::{keycrack::WepKeystreamSample, wep::WepKey};
+
+pub mod util;
+
 pub mod keycrack;
 pub mod rc4;
+pub mod wep;
 
 pub mod ui;
+
+const KEYCRACK_SETTINGS: keycrack::WepKeyCrackerSettings = keycrack::WepKeyCrackerSettings {
+    num_test_samples: 65536,
+    test_sample_fract: 0.9,
+    test_sample_period: 1024,
+};
+
+static TERMINAL_LOCK: AtomicBool = AtomicBool::new(true);
 
 fn main() -> Result<(), Box<dyn Error>> {
     //Initialize the terminal
@@ -22,15 +39,40 @@ fn main() -> Result<(), Box<dyn Error>> {
     std::io::stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
 
+    //Install the panic hook
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        TERMINAL_LOCK.store(false, atomic::Ordering::SeqCst);
+        crossterm::terminal::disable_raw_mode().unwrap();
+        std::io::stdout().execute(LeaveAlternateScreen).unwrap();
+
+        original_hook(panic);
+    }));
+
     //Run the main UI loop
     let mut app = App {
-        scene: Box::from(ui::keycrack::UIKeycrack {}),
+        scene: Box::from(ui::keycrack::UIKeyCrack::new(&KEYCRACK_SETTINGS, &|| {
+            static TEST_KEY: WepKey = WepKey::Wep104Key([
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
+            ]);
+
+            //Generate a random sample from a random IV
+            let mut sample = WepKeystreamSample::default();
+            rand::thread_rng().fill_bytes(&mut sample.iv);
+            TEST_KEY
+                .create_rc4(&sample.iv)
+                .gen_keystream(&mut sample.keystream);
+
+            sample
+        })),
     };
     app.run(&mut terminal)?;
 
-    //Cleanup the terminal
-    crossterm::terminal::disable_raw_mode()?;
-    std::io::stdout().execute(LeaveAlternateScreen)?;
+    //Clean up the terminal
+    if TERMINAL_LOCK.load(atomic::Ordering::SeqCst) {
+        crossterm::terminal::disable_raw_mode().unwrap();
+        std::io::stdout().execute(LeaveAlternateScreen).unwrap();
+    }
 
     Ok(())
 }
@@ -52,12 +94,14 @@ impl App {
         }
 
         //Run the main UI loop
-        while !should_quit.load(atomic::Ordering::SeqCst) {
+        while !should_quit.load(atomic::Ordering::SeqCst) && !self.scene.should_quit() {
             //Draw the current UI scene
-            terminal.draw(|f| self.scene.draw_ui(f))?;
+            if TERMINAL_LOCK.load(atomic::Ordering::SeqCst) {
+                terminal.draw(|f| self.scene.draw_ui(f))?;
+            }
 
             //Poll for events
-            if event::poll(Duration::from_millis(16))? {
+            if event::poll(Duration::from_millis(10))? {
                 while event::poll(Duration::from_millis(0))? {
                     let evt = event::read()?;
 

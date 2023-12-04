@@ -8,11 +8,11 @@ impl Default for RC4Cipher {
     fn default() -> Self {
         //Init the permutation to the identity permutation
         let mut s = [0u8; 256];
-        for i in 0..255 {
-            s[i] = i as u8;
+        for (i, sb) in s.iter_mut().enumerate() {
+            *sb = i as u8;
         }
 
-        Self { s: s, i: 0, j: 0 }
+        Self { s, i: 0, j: 0 }
     }
 }
 
@@ -52,6 +52,12 @@ impl RC4Cipher {
 
         //Lookup keystream byte
         self.s[(self.s[self.j] as usize + self.s[self.i] as usize) % 256]
+    }
+
+    pub fn gen_keystream(&mut self, keystream: &mut [u8]) {
+        for ksb in keystream.iter_mut() {
+            *ksb = self.gen_keystream_byte();
+        }
     }
 }
 
