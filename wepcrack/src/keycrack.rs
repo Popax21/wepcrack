@@ -61,7 +61,7 @@ impl WepKeyCracker {
         let p_nopick: f64 = p_nopick_i(1);
         let p_nopick_ks: f64 = p_nopick.powi(254);
 
-        let mut q_i_accum: f64 = 1f64;
+        let mut q_i_accum: f64 = 1.;
         for (i, p_correct) in p_correct.iter_mut().enumerate() {
             let q_i = q_i_accum * p_nopick_i(i as i32);
             q_i_accum *= p_nopick * p_nopick_i(i as i32 + 1);
@@ -91,7 +91,7 @@ impl WepKeyCracker {
         //Do a partial keyschedule to determine S_3 and j_3
         let (s_3, j_3) = {
             let mut rc4 = RC4Cipher::default();
-            rc4.do_partial_keyschedule(&sample.iv, 3);
+            rc4.do_partial_keyschedule(&sample.iv);
             (rc4.s, rc4.j)
         };
 
@@ -108,7 +108,9 @@ impl WepKeyCracker {
             s3_sum += s_3[3 + i] as usize;
 
             //Calculate sigma
-            let sigma = sinv_3[(3 + i + sample.keystream[2 + i] as usize) % 256] as isize
+            let sigma = sinv_3
+                [(3 + i as isize - sample.keystream[2 + i] as isize).rem_euclid(256) as usize]
+                as isize
                 - (j_3 + s3_sum) as isize;
 
             //Add a vote for this sigma
