@@ -26,6 +26,8 @@ pub mod wep;
 pub mod ui;
 
 const KEYCRACK_SETTINGS: keycracker::KeyCrackerSettings = keycracker::KeyCrackerSettings {
+    key_pred_score_threshold: 0.5,
+
     num_test_samples: 65536,
     test_sample_period: 1024,
     test_sample_threshold: 0.9,
@@ -97,7 +99,7 @@ impl App {
         while !should_quit.load(atomic::Ordering::SeqCst) && !self.scene.should_quit() {
             //Draw the current UI scene
             if TERMINAL_LOCK.load(atomic::Ordering::SeqCst) {
-                terminal.draw(|f| self.scene.draw_ui(f))?;
+                terminal.draw(|f| self.scene.draw(f))?;
             }
 
             //Poll for events

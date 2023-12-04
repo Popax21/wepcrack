@@ -4,12 +4,18 @@ use super::{KeyByteInfo, KeystreamSample, TestSampleBuffer};
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyCrackerSettings {
+    //Sample collection settings
+    pub key_pred_score_threshold: f64,
+
+    //Test buffer settings
     pub num_test_samples: usize,
     pub test_sample_period: usize,
     pub test_sample_threshold: f64,
 }
 
 pub struct WepKeyCracker {
+    settings: KeyCrackerSettings,
+
     num_samples: usize,
     sigma_votes: [[usize; 256]; WepKey::LEN_104],
 
@@ -19,6 +25,8 @@ pub struct WepKeyCracker {
 impl WepKeyCracker {
     pub fn new(settings: &KeyCrackerSettings) -> WepKeyCracker {
         WepKeyCracker {
+            settings: *settings,
+
             num_samples: 0,
             sigma_votes: [[0; 256]; WepKey::LEN_104],
 
@@ -28,6 +36,10 @@ impl WepKeyCracker {
                 settings.test_sample_threshold,
             ),
         }
+    }
+
+    pub const fn settings(&self) -> KeyCrackerSettings {
+        self.settings
     }
 
     pub const fn num_samples(&self) -> usize {

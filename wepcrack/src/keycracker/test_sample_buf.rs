@@ -27,7 +27,7 @@ impl TestSampleBuffer {
             period_timer: 0,
             sample_period,
 
-            test_threshold_fract: test_threshold_fract,
+            test_threshold_fract,
         }
     }
 
