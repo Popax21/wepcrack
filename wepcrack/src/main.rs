@@ -15,20 +15,20 @@ use std::{
 };
 use ui::UIScene;
 
-use crate::{keycrack::WepKeystreamSample, wep::WepKey};
+use crate::{keycracker::KeystreamSample, wep::WepKey};
 
 pub mod util;
 
-pub mod keycrack;
+pub mod keycracker;
 pub mod rc4;
 pub mod wep;
 
 pub mod ui;
 
-const KEYCRACK_SETTINGS: keycrack::WepKeyCrackerSettings = keycrack::WepKeyCrackerSettings {
+const KEYCRACK_SETTINGS: keycracker::KeyCrackerSettings = keycracker::KeyCrackerSettings {
     num_test_samples: 65536,
-    test_sample_fract: 0.9,
     test_sample_period: 1024,
+    test_sample_threshold: 0.9,
 };
 
 static TERMINAL_LOCK: AtomicBool = AtomicBool::new(true);
@@ -53,11 +53,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut app = App {
         scene: Box::from(ui::keycrack::UIKeyCrack::new(&KEYCRACK_SETTINGS, &|| {
             static TEST_KEY: WepKey = WepKey::Wep104Key([
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
+                0x01, 252, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
             ]);
 
             //Generate a random sample from a random IV
-            let mut sample = WepKeystreamSample::default();
+            let mut sample = KeystreamSample::default();
             rand::thread_rng().fill_bytes(&mut sample.iv);
             TEST_KEY
                 .create_rc4(&sample.iv)

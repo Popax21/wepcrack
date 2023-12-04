@@ -4,13 +4,13 @@ use crossterm::event::Event;
 use ratatui::{
     prelude::{Alignment, Constraint, Direction, Layout, Rect},
     style::Stylize,
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
 
 use crate::{
-    keycrack::{WepKeyCracker, WepKeyCrackerSettings, WepKeystreamSampleProvider},
+    keycracker::{KeyBytePrediction, KeyCrackerSettings, KeystreamSampleProvider, WepKeyCracker},
     util::RecessiveMutex,
     wep::WepKey,
 };
@@ -20,7 +20,7 @@ use super::UIScene;
 struct KeyCrackerData<'a> {
     exit: bool,
     cracker: WepKeyCracker,
-    sample_provider: &'a WepKeystreamSampleProvider,
+    sample_provider: &'a KeystreamSampleProvider,
 }
 pub struct UIKeyCrack<'a> {
     cracker_data: Arc<RecessiveMutex<KeyCrackerData<'a>>>,
@@ -29,8 +29,8 @@ pub struct UIKeyCrack<'a> {
 
 impl UIKeyCrack<'_> {
     pub fn new<'a>(
-        keycrack_settings: &WepKeyCrackerSettings,
-        sample_provider: &'a WepKeystreamSampleProvider,
+        keycrack_settings: &KeyCrackerSettings,
+        sample_provider: &'a KeystreamSampleProvider,
     ) -> UIKeyCrack<'a> {
         //Initialize the key cracker data
         let cracker_data = KeyCrackerData {
@@ -115,26 +115,47 @@ impl UIKeyCrack<'_> {
             //Get key byte info
             let info = cracker_data.cracker.calc_key_byte_info(i);
 
-            //Create the list item
-            sigma_list.push(ListItem::new(Line::from(vec![
+            //Construct the info line
+            let mut info_line = Vec::<Span<'_>>::new();
+
+            info_line.extend_from_slice(&[
                 "σ".cyan().bold(),
                 "[".dark_gray(),
                 format!("{i:2}").into(),
                 "]".dark_gray(),
-                ": ".into(),
-                "candidate=".dark_gray(),
+                ":".into(),
+            ]);
+
+            // - probabilities
+            info_line.extend_from_slice(&[
+                " candidate=".dark_gray(),
                 format!("{:02x}", info.candidate_sigma).into(),
                 " p_candidate=".dark_gray(),
                 format!("{:.8}", info.p_candidate).into(),
                 " p_correct=".dark_gray(),
                 format!("{:.8}", info.p_correct).into(),
                 " p_equal=".dark_gray(),
+            ]);
+
+            // - errors
+            info_line.extend_from_slice(&[
                 format!("{:.8}", info.p_equal).into(),
                 " err_normal=".dark_gray(),
                 format!("{:1.9}", info.err_normal).into(),
                 " err_strong=".dark_gray(),
                 format!("{:1.9}", info.err_strong).into(),
-            ])))
+            ]);
+
+            // - prediction
+            info_line.push(" pred: ".dark_gray());
+            match info.get_prediction() {
+                KeyBytePrediction::Normal { sigma: _ } => info_line.push("normal".magenta().bold()),
+                KeyBytePrediction::Strong => info_line.push("strong".cyan().bold()),
+            }
+            info_line.push(format!(" {:3.3}%", info.get_prediction_score() * 100.).into());
+
+            //Create the list item
+            sigma_list.push(ListItem::new(Line::from(info_line)));
         }
 
         frame.render_widget(List::new(sigma_list), layout[0]);
