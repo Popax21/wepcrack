@@ -26,10 +26,10 @@ pub mod wep;
 pub mod ui;
 
 const KEYCRACK_SETTINGS: keycracker::KeyCrackerSettings = keycracker::KeyCrackerSettings {
-    key_pred_score_threshold: 0.5,
+    key_prediction_threshold: 0.5,
 
-    num_test_samples: 65536,
-    test_sample_period: 1024,
+    num_test_samples: 2048,
+    test_sample_period: 128,
     test_sample_threshold: 0.9,
 };
 

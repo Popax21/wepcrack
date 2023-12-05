@@ -31,6 +31,10 @@ impl TestSampleBuffer {
         }
     }
 
+    pub fn num_samples(&self) -> usize {
+        self.samples.len()
+    }
+
     pub fn is_ready(&self) -> bool {
         self.samples.len() >= self.buffer_size
     }

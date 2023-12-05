@@ -11,13 +11,28 @@ use ratatui::{
 
 use crate::{
     keycracker::{KeyCrackerSettings, KeystreamSampleProvider},
-    ui::{UIScene, UIWidget},
+    ui::UIScene,
 };
 
-use super::{KeyCrackerThread, KeyCrackerThreadData, SampleStatsWidget, SigmaInfoWidget};
+use super::{
+    KeyCrackPhase, KeyCrackWidget, KeyCrackerThread, KeyCrackerThreadData, OverviewWidget,
+    SigmaInfoWidget,
+};
+
+struct KeyCrackWidgets {
+    overview_widget: OverviewWidget,
+    sigma_info_widget: SigmaInfoWidget,
+}
+
+impl KeyCrackWidgets {
+    fn get_ui_widgets(&mut self) -> Vec<&mut dyn KeyCrackWidget> {
+        vec![&mut self.overview_widget, &mut self.sigma_info_widget]
+    }
+}
 
 pub struct UIKeyCrack<'a> {
     cracker_thread: KeyCrackerThread<'a>,
+    widgets: KeyCrackWidgets,
 }
 
 impl<'d> UIKeyCrack<'d> {
@@ -27,17 +42,25 @@ impl<'d> UIKeyCrack<'d> {
     ) -> UIKeyCrack<'a> {
         UIKeyCrack {
             cracker_thread: KeyCrackerThread::launch(cracker_settings, sample_provider),
+
+            widgets: KeyCrackWidgets {
+                overview_widget: OverviewWidget::new(),
+                sigma_info_widget: SigmaInfoWidget::new(),
+            },
         }
     }
 
-    fn create_ui_widgets<'a>(
-        &self,
-        cracker_data: &'a KeyCrackerThreadData<'d>,
-    ) -> Vec<Box<dyn UIWidget + 'a>> {
-        vec![
-            Box::new(SampleStatsWidget::new(&cracker_data.cracker)),
-            Box::new(SigmaInfoWidget::new(&cracker_data.cracker)),
-        ]
+    fn advance_phase_if_done(&self, cracker_data: &mut KeyCrackerThreadData) {
+        match cracker_data.phase() {
+            KeyCrackPhase::SampleCollection => {
+                //Check if the cracker is ready
+                if cracker_data.cracker.is_ready() {
+                    cracker_data.change_phase(KeyCrackPhase::KeyTesting);
+                }
+            }
+            KeyCrackPhase::KeyTesting => {}
+            KeyCrackPhase::Done => {}
+        }
     }
 }
 
@@ -46,14 +69,17 @@ impl UIScene for UIKeyCrack<'_> {
         self.cracker_thread.did_crash()
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         //Lock the key cracker thread data
-        let Ok(cracker_data) = self.cracker_thread.lock_data() else {
+        let Ok(mut cracker_data) = self.cracker_thread.lock_data() else {
             return;
         };
 
-        //Create widget list
-        let widgets = self.create_ui_widgets(&cracker_data);
+        //Advance the cracker phase
+        self.advance_phase_if_done(&mut cracker_data);
+
+        //Get the UI widget list
+        let mut widgets = self.widgets.get_ui_widgets();
 
         //Calculate the layout
         let layout = Layout::default()
@@ -80,8 +106,8 @@ impl UIScene for UIKeyCrack<'_> {
         let layout = &layout[1..];
 
         //Draw widgets
-        for (i, widget) in widgets.iter().enumerate() {
-            widget.draw(frame, layout[i]);
+        for (i, widget) in widgets.iter_mut().enumerate() {
+            widget.draw(&cracker_data, frame, layout[i]);
         }
     }
 

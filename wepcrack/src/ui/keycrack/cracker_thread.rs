@@ -8,10 +8,29 @@ use crate::{
     util::RecessiveMutex,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyCrackPhase {
+    SampleCollection,
+    KeyTesting,
+    Done,
+}
+
 pub(crate) struct KeyCrackerThreadData<'a> {
     exit: bool,
+    phase: KeyCrackPhase,
+
     pub cracker: WepKeyCracker,
     pub sample_provider: &'a KeystreamSampleProvider,
+}
+
+impl KeyCrackerThreadData<'_> {
+    pub const fn phase(&self) -> KeyCrackPhase {
+        self.phase
+    }
+
+    pub fn change_phase(&mut self, phase: KeyCrackPhase) {
+        self.phase = phase;
+    }
 }
 
 pub(crate) struct KeyCrackerThread<'a> {
@@ -20,13 +39,42 @@ pub(crate) struct KeyCrackerThread<'a> {
 }
 
 impl<'d> KeyCrackerThread<'d> {
-    pub fn launch<'a>(
+    fn cracker_thread_func(data: &RecessiveMutex<KeyCrackerThreadData<'d>>) {
+        loop {
+            //Lock the cracker data
+            let Ok(mut cracker_data) = data.lock_recessive() else {
+                return;
+            };
+
+            //Exit if we should
+            if cracker_data.exit {
+                return;
+            }
+
+            //Run per-phase logic
+            match cracker_data.phase {
+                KeyCrackPhase::SampleCollection => {
+                    //Collect a sample and process it
+                    let sample = (cracker_data.sample_provider)();
+                    cracker_data.cracker.accept_sample(&sample);
+                }
+                KeyCrackPhase::KeyTesting => {
+                    //TODO
+                }
+                KeyCrackPhase::Done => std::thread::yield_now(),
+            }
+        }
+    }
+
+    pub fn launch(
         cracker_settings: &KeyCrackerSettings,
-        sample_provider: &'a KeystreamSampleProvider,
-    ) -> KeyCrackerThread<'a> {
+        sample_provider: &'d KeystreamSampleProvider,
+    ) -> KeyCrackerThread<'d> {
         //Initialize the key cracker data
-        let data = KeyCrackerThreadData {
+        let data = KeyCrackerThreadData::<'d> {
             exit: false,
+            phase: KeyCrackPhase::SampleCollection,
+
             cracker: WepKeyCracker::new(cracker_settings),
             sample_provider,
         };
@@ -43,18 +91,11 @@ impl<'d> KeyCrackerThread<'d> {
                 )
             };
 
-            std::thread::spawn(move || loop {
-                //Lock the cracker data
-                let mut cracker_data = data.lock_recessive().unwrap();
-
-                //Exit if we should
-                if cracker_data.exit {
-                    return;
-                }
-
-                //Collect a sample and process it
-                let sample = (cracker_data.sample_provider)();
-                cracker_data.cracker.accept_sample(&sample);
+            std::thread::spawn(move || {
+                let data = unsafe {
+                    std::mem::transmute::<_, Arc<RecessiveMutex<KeyCrackerThreadData<'d>>>>(data)
+                };
+                Self::cracker_thread_func(&data);
             })
         };
 

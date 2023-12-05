@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use crate::wep::WepKey;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct KeyByteInfo {
     pub candidate_sigma: u8,
 
@@ -90,7 +90,7 @@ impl KeyByteInfo {
         }
     }
 
-    pub fn get_prediction(&self) -> KeyBytePrediction {
+    pub fn prediction(&self) -> KeyBytePrediction {
         if self.err_normal < self.err_strong {
             KeyBytePrediction::Normal {
                 sigma: self.candidate_sigma,
@@ -100,7 +100,7 @@ impl KeyByteInfo {
         }
     }
 
-    pub fn get_prediction_score(&self) -> f64 {
+    pub fn prediction_score(&self) -> f64 {
         if self.err_normal < self.err_strong {
             (self.err_strong - self.err_normal) / self.err_normal
         } else {

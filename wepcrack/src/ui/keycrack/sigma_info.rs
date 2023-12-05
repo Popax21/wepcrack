@@ -6,29 +6,28 @@ use ratatui::{
     Frame,
 };
 
-use crate::{
-    keycracker::{KeyBytePrediction, WepKeyCracker},
-    ui::UIWidget,
-    wep::WepKey,
-};
+use crate::{keycracker::KeyBytePrediction, wep::WepKey};
 
-pub(super) struct SigmaInfoWidget<'a>(&'a WepKeyCracker);
+use super::{KeyCrackWidget, KeyCrackerThreadData};
 
-impl SigmaInfoWidget<'_> {
-    pub fn new(cracker: &WepKeyCracker) -> SigmaInfoWidget<'_> {
-        SigmaInfoWidget(cracker)
+pub(super) struct SigmaInfoWidget;
+
+impl SigmaInfoWidget {
+    pub fn new() -> SigmaInfoWidget {
+        SigmaInfoWidget
     }
 }
 
-impl UIWidget for SigmaInfoWidget<'_> {
+impl KeyCrackWidget for SigmaInfoWidget {
     fn size(&self) -> Constraint {
         Constraint::Length(2 + WepKey::LEN_104 as u16)
     }
 
-    fn draw(&self, frame: &mut Frame, area: Rect) {
+    fn draw(&mut self, cracker_data: &KeyCrackerThreadData, frame: &mut Frame, area: Rect) {
         let layout = Layout::default()
             .constraints([Constraint::Length(WepKey::LEN_104 as u16)])
-            .margin(1)
+            .horizontal_margin(2)
+            .vertical_margin(1)
             .split(area);
 
         //Draw the border block
@@ -42,7 +41,7 @@ impl UIWidget for SigmaInfoWidget<'_> {
 
         for i in 0..WepKey::LEN_104 {
             //Get key byte info
-            let info = self.0.calc_key_byte_info(i);
+            let info = cracker_data.cracker.key_byte_info(i);
 
             //Construct the info line
             let mut info_line = Vec::<Span<'_>>::new();
@@ -76,14 +75,16 @@ impl UIWidget for SigmaInfoWidget<'_> {
             ]);
 
             // - prediction
+            let prediction = info.prediction();
+            let prediction_score = info.prediction_score();
             info_line.extend([
                 " pred: ".dark_gray(),
-                match info.get_prediction() {
+                match prediction {
                     KeyBytePrediction::Normal { sigma: _ } => "normal".magenta(),
                     KeyBytePrediction::Strong => "strong".cyan(),
                 }
                 .bold(),
-                format!(" {:3.3}%", info.get_prediction_score() * 100.).into(),
+                format!(" {:7.3}%", prediction_score * 100.).into(),
             ]);
 
             //Create the list item
@@ -91,8 +92,8 @@ impl UIWidget for SigmaInfoWidget<'_> {
 
             //Change the background color for predictions past the threshold
             let info_list_item =
-                if info.get_prediction_score() >= self.0.settings().key_pred_score_threshold {
-                    match info.get_prediction() {
+                if prediction_score >= cracker_data.cracker.settings().key_prediction_threshold {
+                    match prediction {
                         KeyBytePrediction::Normal { sigma: _ } => info_list_item.on_light_magenta(),
                         KeyBytePrediction::Strong => info_list_item.on_light_cyan(),
                     }
