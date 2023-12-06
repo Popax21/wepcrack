@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{KeyCrackWidget, KeyCracker, KeyCrackerPhase};
+use super::{KeyCracker, KeyCrackerPhase, KeyCrackerWidget};
 
 pub(crate) struct OverviewWidget {
     start_time: Instant,
@@ -131,7 +131,7 @@ impl OverviewWidget {
     }
 }
 
-impl KeyCrackWidget for OverviewWidget {
+impl KeyCrackerWidget for OverviewWidget {
     fn size(&self) -> Constraint {
         Constraint::Length(2 + 1 + 1 + 1 + 1 + 2)
     }
@@ -150,7 +150,7 @@ impl KeyCrackWidget for OverviewWidget {
                 .margin(1)
                 .split(area)[..]
         else {
-            panic!();
+            unreachable!();
         };
 
         //Draw the border block
@@ -193,36 +193,56 @@ impl KeyCrackWidget for OverviewWidget {
         self.draw_sample_stats(cracker, frame, sample_stats_layout);
 
         //Draw the test sample buffer / key tester statistics
-        match cracker.phase() {
-            KeyCrackerPhase::SampleCollection => {
-                self.draw_test_buf_stats(cracker, frame, test_layout)
-            }
-            _ => self.draw_key_tester_stats(cracker, frame, test_layout),
+        if cracker.phase() < KeyCrackerPhase::CandidateKeyTesting {
+            self.draw_test_buf_stats(cracker, frame, test_layout);
+        } else {
+            self.draw_key_tester_stats(cracker, frame, test_layout);
         }
 
         //Draw the progress gauge
-        frame.render_widget(
-            Gauge::default()
-                .gauge_style(Style::new().blue())
-                .block(
+        if cracker.is_running() {
+            frame.render_widget(
+                Gauge::default()
+                    .gauge_style(Style::new().blue())
+                    .block(Block::default().title(match cracker.phase() {
+                        KeyCrackerPhase::SampleCollection => {
+                            "Collecting samples for sigma sum prediction..."
+                        }
+                        KeyCrackerPhase::CandidateKeyTesting => "Testing candidate keys...",
+                        _ => unreachable!(),
+                    }))
+                    .ratio(cracker.progress()),
+                progbar_layout,
+            );
+        } else if let Some(cracked_key) = cracker.cracked_key() {
+            let layout = Layout::default()
+                .constraints([Constraint::Length(1), Constraint::Length(1)])
+                .split(progbar_layout);
+
+            frame.render_widget(
+                Paragraph::new("Done - Found WEP Key! \\(^-^)/".bold()),
+                layout[0],
+            );
+            frame.render_widget(
+                Paragraph::new(Line::from(match cracked_key {
+                    crate::wep::WepKey::Wep40Key(key) => {
+                        vec!["WEP-40 key: ".bold(), hex::encode(key).into()]
+                    }
+                    crate::wep::WepKey::Wep104Key(key) => {
+                        vec!["WEP-104 key: ".bold(), hex::encode(key).into()]
+                    }
+                })),
+                layout[1],
+            );
+        } else {
+            frame.render_widget(
+                Paragraph::new("").block(
                     Block::default()
-                        .title(match cracker.phase() {
-                            KeyCrackerPhase::SampleCollection => {
-                                "Collecting samples for sigma sum prediction..."
-                            }
-                            KeyCrackerPhase::CandidateKeyTesting => "Testing candidate keys...",
-                            KeyCrackerPhase::FinishedSuccess => "Done - Found WEP Key! \\(^-^)/",
-                            KeyCrackerPhase::FinishedFailure => "Done - Didn't find WEP Key :(",
-                        })
-                        .title_style(match cracker.phase() {
-                            KeyCrackerPhase::FinishedSuccess | KeyCrackerPhase::FinishedFailure => {
-                                Style::new().bold()
-                            }
-                            _ => Style::default(),
-                        }),
-                )
-                .ratio(cracker.progress()),
-            progbar_layout,
-        );
+                        .title("Done - Didn't find WEP Key :(")
+                        .bold(),
+                ),
+                progbar_layout,
+            );
+        }
     }
 }

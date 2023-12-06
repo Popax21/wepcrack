@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{keycracker::KeyBytePrediction, wep::WepKey};
 
-use super::{KeyCrackWidget, KeyCracker};
+use super::{KeyCracker, KeyCrackerWidget};
 
 pub(super) struct SigmaInfoWidget;
 
@@ -18,7 +18,7 @@ impl SigmaInfoWidget {
     }
 }
 
-impl KeyCrackWidget for SigmaInfoWidget {
+impl KeyCrackerWidget for SigmaInfoWidget {
     fn size(&self) -> Constraint {
         Constraint::Length(2 + WepKey::LEN_104 as u16)
     }

@@ -1,4 +1,7 @@
-use crate::keycracker::{KeyPredictor, KeyTester, KeystreamSample, TestSampleBuffer};
+use crate::{
+    keycracker::{KeyPredictor, KeyTester, KeystreamSample, TestSampleBuffer},
+    wep::WepKey,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyCrackerSettings {
@@ -13,7 +16,7 @@ pub struct KeyCrackerSettings {
 
 pub type KeyCrackerSampleProvider = dyn FnMut() -> KeystreamSample + Send + Sync;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum KeyCrackerPhase {
     SampleCollection,
     CandidateKeyTesting,
@@ -31,6 +34,8 @@ pub(crate) struct KeyCracker<'a> {
     key_predictor: KeyPredictor,
     test_sample_buf: TestSampleBuffer,
     key_tester: Option<KeyTester>,
+
+    cracked_key: Option<WepKey>,
 }
 
 impl KeyCracker<'_> {
@@ -52,15 +57,24 @@ impl KeyCracker<'_> {
                 settings.test_sample_threshold,
             ),
             key_tester: None,
+
+            cracked_key: None,
         }
+    }
+
+    pub const fn settings(&self) -> &KeyCrackerSettings {
+        &self.settings
     }
 
     pub const fn phase(&self) -> KeyCrackerPhase {
         self.phase
     }
 
-    pub fn settings(&self) -> &KeyCrackerSettings {
-        &self.settings
+    pub const fn is_running(&self) -> bool {
+        !matches!(
+            self.phase,
+            KeyCrackerPhase::FinishedSuccess | KeyCrackerPhase::FinishedFailure
+        )
     }
 
     pub const fn key_predictor(&self) -> &KeyPredictor {
@@ -75,11 +89,8 @@ impl KeyCracker<'_> {
         self.key_tester.as_ref()
     }
 
-    pub const fn is_running(&self) -> bool {
-        !matches!(
-            self.phase,
-            KeyCrackerPhase::FinishedSuccess | KeyCrackerPhase::FinishedFailure
-        )
+    pub const fn cracked_key(&self) -> Option<&WepKey> {
+        self.cracked_key.as_ref()
     }
 
     pub fn progress(&self) -> f64 {
@@ -141,6 +152,7 @@ impl KeyCracker<'_> {
                 if let Some(key) = tester.test_current_key(&self.test_sample_buf) {
                     //We found the key!
                     self.phase = KeyCrackerPhase::FinishedSuccess;
+                    self.cracked_key = Some(key);
                     return;
                 }
 

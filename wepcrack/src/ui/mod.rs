@@ -1,4 +1,4 @@
 pub mod app;
 pub use app::*;
 
-pub mod keycrack;
+pub mod keycracker;

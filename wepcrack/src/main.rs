@@ -25,7 +25,7 @@ pub mod wep;
 
 pub mod ui;
 
-const KEYCRACK_SETTINGS: ui::keycrack::KeyCrackerSettings = ui::keycrack::KeyCrackerSettings {
+const KEYCRACK_SETTINGS: ui::keycracker::KeyCrackerSettings = ui::keycracker::KeyCrackerSettings {
     key_predictor_threshold: 0.5,
 
     num_test_samples: 2048,
@@ -52,13 +52,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     //Run the main UI loop
-    let mut random_sample_provider = || {
-        static TEST_KEY: WepKey = WepKey::Wep40Key([0x01, 252, 0x03, 0x04, 0x05]);
+    let mut test_key = [0u8; WepKey::LEN_104];
+    rand::thread_rng().fill_bytes(&mut test_key);
+    let test_key: WepKey = WepKey::Wep104Key(test_key);
 
+    let mut random_sample_provider = move || {
         //Generate a random sample from a random IV
         let mut sample = KeystreamSample::default();
         rand::thread_rng().fill_bytes(&mut sample.iv);
-        TEST_KEY
+        test_key
             .create_rc4(&sample.iv)
             .gen_keystream(&mut sample.keystream);
 
@@ -66,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut app = App {
-        scene: Box::from(ui::keycrack::UIKeyCrack::new(
+        scene: Box::from(ui::keycracker::UIKeyCracker::new(
             KEYCRACK_SETTINGS,
             &mut random_sample_provider,
         )),

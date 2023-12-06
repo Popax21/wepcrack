@@ -12,48 +12,59 @@ use ratatui::{
 use crate::ui::UIScene;
 
 use super::{
-    KeyCracker, KeyCrackerSampleProvider, KeyCrackerSettings, KeyCrackerThread, OverviewWidget,
-    SigmaInfoWidget,
+    CandidateKeyTestingWidget, KeyCracker, KeyCrackerPhase, KeyCrackerSampleProvider,
+    KeyCrackerSettings, KeyCrackerThread, OverviewWidget, SigmaInfoWidget,
 };
 
-pub(crate) trait KeyCrackWidget {
+pub(crate) trait KeyCrackerWidget {
     fn size(&self) -> Constraint;
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect);
 }
 
-struct KeyCrackWidgets {
+struct KeyCrackerWidgets {
     overview_widget: OverviewWidget,
     sigma_info_widget: SigmaInfoWidget,
+    candidate_testing_widget: CandidateKeyTestingWidget,
 }
 
-impl KeyCrackWidgets {
-    fn get_ui_widgets(&mut self) -> Vec<&mut dyn KeyCrackWidget> {
-        vec![&mut self.overview_widget, &mut self.sigma_info_widget]
+impl KeyCrackerWidgets {
+    fn get_ui_widgets(&mut self, cracker: &KeyCracker) -> Vec<&mut dyn KeyCrackerWidget> {
+        match cracker.phase() {
+            KeyCrackerPhase::SampleCollection => {
+                vec![&mut self.overview_widget, &mut self.sigma_info_widget]
+            }
+            _ => vec![
+                &mut self.overview_widget,
+                &mut self.sigma_info_widget,
+                &mut self.candidate_testing_widget,
+            ],
+        }
     }
 }
 
-pub struct UIKeyCrack<'a> {
+pub struct UIKeyCracker<'a> {
     cracker_thread: KeyCrackerThread<'a>,
-    widgets: KeyCrackWidgets,
+    widgets: KeyCrackerWidgets,
 }
 
-impl UIKeyCrack<'_> {
+impl UIKeyCracker<'_> {
     pub fn new(
         cracker_settings: KeyCrackerSettings,
         sample_provider: &mut KeyCrackerSampleProvider,
-    ) -> UIKeyCrack {
-        UIKeyCrack {
+    ) -> UIKeyCracker {
+        UIKeyCracker {
             cracker_thread: KeyCrackerThread::launch(cracker_settings, sample_provider),
 
-            widgets: KeyCrackWidgets {
+            widgets: KeyCrackerWidgets {
                 overview_widget: OverviewWidget::new(),
                 sigma_info_widget: SigmaInfoWidget::new(),
+                candidate_testing_widget: CandidateKeyTestingWidget::new(),
             },
         }
     }
 }
 
-impl UIScene for UIKeyCrack<'_> {
+impl UIScene for UIKeyCracker<'_> {
     fn should_quit(&self) -> bool {
         self.cracker_thread.did_crash()
     }
@@ -65,7 +76,7 @@ impl UIScene for UIKeyCrack<'_> {
         };
 
         //Get the UI widget list
-        let mut widgets = self.widgets.get_ui_widgets();
+        let mut widgets = self.widgets.get_ui_widgets(&cracker);
 
         //Calculate the layout
         let layout = Layout::default()
