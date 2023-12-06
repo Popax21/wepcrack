@@ -25,8 +25,8 @@ pub mod wep;
 
 pub mod ui;
 
-const KEYCRACK_SETTINGS: keycracker::KeyCrackerSettings = keycracker::KeyCrackerSettings {
-    key_prediction_threshold: 0.5,
+const KEYCRACK_SETTINGS: ui::keycrack::KeyCrackerSettings = ui::keycrack::KeyCrackerSettings {
+    key_predictor_threshold: 0.5,
 
     num_test_samples: 2048,
     test_sample_period: 128,
@@ -52,21 +52,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     //Run the main UI loop
+    let mut random_sample_provider = || {
+        static TEST_KEY: WepKey = WepKey::Wep104Key([
+            0x01, 252, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
+        ]);
+
+        //Generate a random sample from a random IV
+        let mut sample = KeystreamSample::default();
+        rand::thread_rng().fill_bytes(&mut sample.iv);
+        TEST_KEY
+            .create_rc4(&sample.iv)
+            .gen_keystream(&mut sample.keystream);
+
+        sample
+    };
+
     let mut app = App {
-        scene: Box::from(ui::keycrack::UIKeyCrack::new(&KEYCRACK_SETTINGS, &|| {
-            static TEST_KEY: WepKey = WepKey::Wep104Key([
-                0x01, 252, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
-            ]);
-
-            //Generate a random sample from a random IV
-            let mut sample = KeystreamSample::default();
-            rand::thread_rng().fill_bytes(&mut sample.iv);
-            TEST_KEY
-                .create_rc4(&sample.iv)
-                .gen_keystream(&mut sample.keystream);
-
-            sample
-        })),
+        scene: Box::from(ui::keycrack::UIKeyCrack::new(
+            KEYCRACK_SETTINGS,
+            &mut random_sample_provider,
+        )),
     };
     app.run(&mut terminal)?;
 
@@ -79,13 +84,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-struct App {
-    scene: Box<dyn UIScene>,
+struct App<'a> {
+    scene: Box<dyn UIScene + 'a>,
 }
 
-impl App {
+impl App<'_> {
     fn run(
-        self: &mut App,
+        &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), Box<dyn Error>> {
         //Install a Ctrl+C handler

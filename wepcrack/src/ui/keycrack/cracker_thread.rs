@@ -1,128 +1,94 @@
 use std::{
-    sync::{Arc, LockResult, MutexGuard},
+    sync::{
+        atomic::{self, AtomicBool},
+        Arc, LockResult, MutexGuard,
+    },
     thread::JoinHandle,
 };
 
-use crate::{
-    keycracker::{KeyCrackerSettings, KeystreamSampleProvider, WepKeyCracker},
-    util::RecessiveMutex,
-};
+use crate::util::RecessiveMutex;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum KeyCrackPhase {
-    SampleCollection,
-    KeyTesting,
-    Done,
-}
-
-pub(crate) struct KeyCrackerThreadData<'a> {
-    exit: bool,
-    phase: KeyCrackPhase,
-
-    pub cracker: WepKeyCracker,
-    pub sample_provider: &'a KeystreamSampleProvider,
-}
-
-impl KeyCrackerThreadData<'_> {
-    pub const fn phase(&self) -> KeyCrackPhase {
-        self.phase
-    }
-
-    pub fn change_phase(&mut self, phase: KeyCrackPhase) {
-        self.phase = phase;
-    }
-}
+use super::{KeyCracker, KeyCrackerSampleProvider, KeyCrackerSettings};
 
 pub(crate) struct KeyCrackerThread<'a> {
-    data: Arc<RecessiveMutex<KeyCrackerThreadData<'a>>>,
     thread: Option<JoinHandle<()>>,
+    should_exit: Arc<AtomicBool>,
+    state: Arc<RecessiveMutex<KeyCracker<'a>>>,
 }
 
 impl<'d> KeyCrackerThread<'d> {
-    fn cracker_thread_func(data: &RecessiveMutex<KeyCrackerThreadData<'d>>) {
-        loop {
-            //Lock the cracker data
-            let Ok(mut cracker_data) = data.lock_recessive() else {
+    fn cracker_thread_func(should_exit: &AtomicBool, state: &RecessiveMutex<KeyCracker<'d>>) {
+        while !should_exit.load(atomic::Ordering::SeqCst) {
+            //Lock the cracker state
+            let Ok(mut state) = state.lock_recessive() else {
+                //The main thread crashed while holding the lock - exit as well
                 return;
             };
 
-            //Exit if we should
-            if cracker_data.exit {
+            //Do one unit of work
+            if state.is_running() {
+                state.do_work();
+            } else {
+                //Indicate we're exiting cleanly
+                should_exit.store(true, atomic::Ordering::SeqCst);
                 return;
-            }
-
-            //Run per-phase logic
-            match cracker_data.phase {
-                KeyCrackPhase::SampleCollection => {
-                    //Collect a sample and process it
-                    let sample = (cracker_data.sample_provider)();
-                    cracker_data.cracker.accept_sample(&sample);
-                }
-                KeyCrackPhase::KeyTesting => {
-                    //TODO
-                }
-                KeyCrackPhase::Done => std::thread::yield_now(),
             }
         }
     }
 
     pub fn launch(
-        cracker_settings: &KeyCrackerSettings,
-        sample_provider: &'d KeystreamSampleProvider,
+        settings: KeyCrackerSettings,
+        sample_provider: &'d mut KeyCrackerSampleProvider,
     ) -> KeyCrackerThread<'d> {
-        //Initialize the key cracker data
-        let data = KeyCrackerThreadData::<'d> {
-            exit: false,
-            phase: KeyCrackPhase::SampleCollection,
-
-            cracker: WepKeyCracker::new(cracker_settings),
+        //Create the thread state
+        let should_exit = Arc::new(AtomicBool::new(false));
+        let state = Arc::new(RecessiveMutex::new(KeyCracker::new(
+            settings,
             sample_provider,
-        };
-        let data = Arc::new(RecessiveMutex::new(data));
+        )));
 
         //Launch the key cracker thread
         let thread = {
-            let data = unsafe {
-                //We know the thread is joined in the drop method, so the thread
-                //will drop the Arc before 'a goes out of scope (since
-                //CrackerThread can not live longer than 'a)
-                std::mem::transmute::<_, Arc<RecessiveMutex<KeyCrackerThreadData<'static>>>>(
-                    data.clone(),
-                )
+            //We know the thread is joined in the drop method, so the thread
+            //will drop the Arc before 'a goes out of scope (since
+            //CrackerThread can not live longer than 'a)
+            let should_exit = should_exit.clone();
+            let state = unsafe {
+                std::mem::transmute::<_, Arc<RecessiveMutex<KeyCracker<'static>>>>(state.clone())
             };
 
             std::thread::spawn(move || {
-                let data = unsafe {
-                    std::mem::transmute::<_, Arc<RecessiveMutex<KeyCrackerThreadData<'d>>>>(data)
-                };
-                Self::cracker_thread_func(&data);
+                let state =
+                    unsafe { std::mem::transmute::<_, Arc<RecessiveMutex<KeyCracker<'d>>>>(state) };
+
+                Self::cracker_thread_func(&should_exit, &state);
             })
         };
 
         KeyCrackerThread {
-            data,
             thread: Some(thread),
+            should_exit,
+            state,
         }
     }
 
     pub fn did_crash(&self) -> bool {
-        match self.thread.as_ref() {
-            Some(thread) => thread.is_finished(),
-            None => true,
-        }
+        !self.should_exit.load(atomic::Ordering::SeqCst)
+            && match self.thread.as_ref() {
+                Some(thread) => thread.is_finished(),
+                None => true,
+            }
     }
 
-    pub fn lock_data(&self) -> LockResult<MutexGuard<'_, KeyCrackerThreadData<'d>>> {
-        self.data.lock_dominant()
+    pub fn lock_state(&self) -> LockResult<MutexGuard<'_, KeyCracker<'d>>> {
+        self.state.lock_dominant()
     }
 }
 
 impl Drop for KeyCrackerThread<'_> {
     fn drop(&mut self) {
         //Stop the key cracker thread
-        if let Ok(mut data) = self.data.lock_dominant() {
-            data.exit = true;
-        }
+        self.should_exit.store(true, atomic::Ordering::SeqCst);
 
         //Join on the crack thread, and propagate panics
         if let Some(handle) = self.thread.take() {

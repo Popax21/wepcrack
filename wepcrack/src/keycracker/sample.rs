@@ -9,5 +9,3 @@ pub struct KeystreamSample {
 impl KeystreamSample {
     pub const KEYSTREAM_LEN: usize = 16;
 }
-
-pub type KeystreamSampleProvider = dyn (Fn() -> KeystreamSample) + Send + Sync;

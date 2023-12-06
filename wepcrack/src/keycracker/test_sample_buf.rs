@@ -4,7 +4,7 @@ use crate::wep::WepKey;
 
 use super::KeystreamSample;
 
-pub(super) struct TestSampleBuffer {
+pub struct TestSampleBuffer {
     samples: VecDeque<KeystreamSample>,
     buffer_size: usize,
 
@@ -35,7 +35,7 @@ impl TestSampleBuffer {
         self.samples.len()
     }
 
-    pub fn is_ready(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.samples.len() >= self.buffer_size
     }
 

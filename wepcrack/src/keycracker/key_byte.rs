@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use crate::wep::WepKey;
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct KeyByteInfo {
+pub struct KeyBytePredictionInfo {
     pub candidate_sigma: u8,
 
     pub p_candidate: f64,
@@ -14,12 +14,17 @@ pub struct KeyByteInfo {
     pub err_normal: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyBytePrediction {
     Normal { sigma: u8 },
     Strong,
 }
 
-impl KeyByteInfo {
+impl KeyBytePredictionInfo {
+    pub const fn num_strong_options(key_idx: usize) -> usize {
+        key_idx
+    }
+
     fn calc_p_correct() -> [f64; WepKey::LEN_104] {
         //Calculate p_correct for all key bytes
         let mut p_correct = [0f64; WepKey::LEN_104];
@@ -47,9 +52,9 @@ impl KeyByteInfo {
         key_idx: usize,
         votes: &[usize; 256],
         total_votes: usize,
-    ) -> KeyByteInfo {
+    ) -> KeyBytePredictionInfo {
         static P_CORRECT: OnceLock<[f64; WepKey::LEN_104]> = OnceLock::new();
-        let p_correct = P_CORRECT.get_or_init(KeyByteInfo::calc_p_correct);
+        let p_correct = P_CORRECT.get_or_init(KeyBytePredictionInfo::calc_p_correct);
 
         //Find the index of the candidate sigma (= the one with the most votes)
         let candidate_sigma = votes
@@ -78,7 +83,7 @@ impl KeyByteInfo {
             }
         }
 
-        KeyByteInfo {
+        KeyBytePredictionInfo {
             candidate_sigma: candidate_sigma as u8,
 
             p_candidate: votes[candidate_sigma] as f64 / total_votes as f64,

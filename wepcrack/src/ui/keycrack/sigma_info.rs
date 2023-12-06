@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{keycracker::KeyBytePrediction, wep::WepKey};
 
-use super::{KeyCrackWidget, KeyCrackerThreadData};
+use super::{KeyCrackWidget, KeyCracker};
 
 pub(super) struct SigmaInfoWidget;
 
@@ -23,7 +23,7 @@ impl KeyCrackWidget for SigmaInfoWidget {
         Constraint::Length(2 + WepKey::LEN_104 as u16)
     }
 
-    fn draw(&mut self, cracker_data: &KeyCrackerThreadData, frame: &mut Frame, area: Rect) {
+    fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {
         let layout = Layout::default()
             .constraints([Constraint::Length(WepKey::LEN_104 as u16)])
             .horizontal_margin(2)
@@ -41,7 +41,7 @@ impl KeyCrackWidget for SigmaInfoWidget {
 
         for i in 0..WepKey::LEN_104 {
             //Get key byte info
-            let info = cracker_data.cracker.key_byte_info(i);
+            let info = cracker.key_predictor.key_byte_info(i);
 
             //Construct the info line
             let mut info_line = Vec::<Span<'_>>::new();
@@ -91,15 +91,14 @@ impl KeyCrackWidget for SigmaInfoWidget {
             let info_list_item = ListItem::new(Line::from(info_line));
 
             //Change the background color for predictions past the threshold
-            let info_list_item =
-                if prediction_score >= cracker_data.cracker.settings().key_prediction_threshold {
-                    match prediction {
-                        KeyBytePrediction::Normal { sigma: _ } => info_list_item.on_light_magenta(),
-                        KeyBytePrediction::Strong => info_list_item.on_light_cyan(),
-                    }
-                } else {
-                    info_list_item
-                };
+            let info_list_item = if prediction_score >= cracker.settings.key_predictor_threshold {
+                match prediction {
+                    KeyBytePrediction::Normal { sigma: _ } => info_list_item.on_light_magenta(),
+                    KeyBytePrediction::Strong => info_list_item.on_light_cyan(),
+                }
+            } else {
+                info_list_item
+            };
 
             sigma_list.push(info_list_item);
         }
