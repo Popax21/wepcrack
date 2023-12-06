@@ -53,9 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //Run the main UI loop
     let mut random_sample_provider = || {
-        static TEST_KEY: WepKey = WepKey::Wep104Key([
-            0x01, 252, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13,
-        ]);
+        static TEST_KEY: WepKey = WepKey::Wep40Key([0x01, 252, 0x03, 0x04, 0x05]);
 
         //Generate a random sample from a random IV
         let mut sample = KeystreamSample::default();

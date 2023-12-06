@@ -21,10 +21,6 @@ pub enum KeyBytePrediction {
 }
 
 impl KeyBytePredictionInfo {
-    pub const fn num_strong_options(key_idx: usize) -> usize {
-        key_idx
-    }
-
     fn calc_p_correct() -> [f64; WepKey::LEN_104] {
         //Calculate p_correct for all key bytes
         let mut p_correct = [0f64; WepKey::LEN_104];

@@ -11,6 +11,7 @@ pub struct KeyPredictor {
 }
 
 impl KeyPredictor {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> KeyPredictor {
         KeyPredictor {
             num_samples: 0,

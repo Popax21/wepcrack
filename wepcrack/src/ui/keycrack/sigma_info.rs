@@ -41,7 +41,7 @@ impl KeyCrackWidget for SigmaInfoWidget {
 
         for i in 0..WepKey::LEN_104 {
             //Get key byte info
-            let info = cracker.key_predictor.key_byte_info(i);
+            let info = cracker.key_predictor().key_byte_info(i);
 
             //Construct the info line
             let mut info_line = Vec::<Span<'_>>::new();
@@ -91,7 +91,7 @@ impl KeyCrackWidget for SigmaInfoWidget {
             let info_list_item = ListItem::new(Line::from(info_line));
 
             //Change the background color for predictions past the threshold
-            let info_list_item = if prediction_score >= cracker.settings.key_predictor_threshold {
+            let info_list_item = if prediction_score >= cracker.settings().key_predictor_threshold {
                 match prediction {
                     KeyBytePrediction::Normal { sigma: _ } => info_list_item.on_light_magenta(),
                     KeyBytePrediction::Strong => info_list_item.on_light_cyan(),

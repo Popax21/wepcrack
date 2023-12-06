@@ -37,11 +37,11 @@ pub struct UIKeyCrack<'a> {
     widgets: KeyCrackWidgets,
 }
 
-impl<'d> UIKeyCrack<'d> {
-    pub fn new<'a>(
+impl UIKeyCrack<'_> {
+    pub fn new(
         cracker_settings: KeyCrackerSettings,
-        sample_provider: &'a mut KeyCrackerSampleProvider,
-    ) -> UIKeyCrack<'a> {
+        sample_provider: &mut KeyCrackerSampleProvider,
+    ) -> UIKeyCrack {
         UIKeyCrack {
             cracker_thread: KeyCrackerThread::launch(cracker_settings, sample_provider),
 
