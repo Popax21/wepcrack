@@ -10,7 +10,7 @@ use crate::util::RecessiveMutex;
 
 use super::{KeyCracker, KeyCrackerSampleProvider, KeyCrackerSettings};
 
-pub(crate) struct KeyCrackerThread<'a> {
+pub(super) struct KeyCrackerThread<'a> {
     thread: Option<JoinHandle<()>>,
     should_exit: Arc<AtomicBool>,
     state: Arc<RecessiveMutex<KeyCracker<'a>>>,

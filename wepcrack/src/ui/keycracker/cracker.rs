@@ -17,14 +17,14 @@ pub struct KeyCrackerSettings {
 pub type KeyCrackerSampleProvider = dyn FnMut() -> KeystreamSample + Send + Sync;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum KeyCrackerPhase {
+pub(super) enum KeyCrackerPhase {
     SampleCollection,
     CandidateKeyTesting,
     FinishedSuccess,
     FinishedFailure,
 }
 
-pub(crate) struct KeyCracker<'a> {
+pub(super) struct KeyCracker<'a> {
     phase: KeyCrackerPhase,
     delay_timer: usize,
 

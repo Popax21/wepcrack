@@ -16,7 +16,7 @@ use super::{
     KeyCrackerSettings, KeyCrackerThread, OverviewWidget, SigmaInfoWidget,
 };
 
-pub(crate) trait KeyCrackerWidget {
+pub(super) trait KeyCrackerWidget {
     fn size(&self) -> Constraint;
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect);
 }

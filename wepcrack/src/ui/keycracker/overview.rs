@@ -11,7 +11,7 @@ use ratatui::{
 
 use super::{KeyCracker, KeyCrackerPhase, KeyCrackerWidget};
 
-pub(crate) struct OverviewWidget {
+pub(super) struct OverviewWidget {
     start_time: Instant,
     end_time: Option<Instant>,
 

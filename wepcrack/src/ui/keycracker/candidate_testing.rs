@@ -13,7 +13,7 @@ use crate::{
 
 use super::{KeyCracker, KeyCrackerWidget};
 
-pub(crate) struct CandidateKeyTestingWidget;
+pub(super) struct CandidateKeyTestingWidget;
 
 impl CandidateKeyTestingWidget {
     pub fn new() -> CandidateKeyTestingWidget {
