@@ -1,5 +1,8 @@
 use crossterm::event::Event;
-use ratatui::Frame;
+use ratatui::{
+    prelude::{Constraint, Direction, Layout, Rect},
+    Frame,
+};
 
 pub trait UIApp {
     fn set_scene(&mut self, scene: impl UIScene);
@@ -8,6 +11,37 @@ pub trait UIApp {
 pub trait UIScene {
     fn should_quit(&self) -> bool;
 
-    fn draw(&mut self, frame: &mut Frame);
+    fn draw(&mut self, frame: &mut Frame, area: Rect);
     fn handle_event(&mut self, event: &Event);
+}
+
+pub trait UIWidget<'a> {
+    type SharedState;
+
+    fn size(&self) -> Constraint;
+    fn draw(&mut self, shared_state: &Self::SharedState, frame: &mut Frame, area: Rect);
+}
+
+pub fn draw_ui_widgets<'a, S>(
+    widgets: &mut [&mut dyn UIWidget<SharedState = S>],
+    state: &'a S,
+    frame: &mut Frame,
+    area: Rect,
+) {
+    //Calculate the layout
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            widgets
+                .iter()
+                .map(|w| w.size())
+                .chain(std::iter::once(Constraint::Min(0)))
+                .collect::<Vec<_>>(),
+        )
+        .split(area);
+
+    //Draw widgets
+    for (i, widget) in widgets.iter_mut().enumerate() {
+        widget.draw(&state, frame, layout[i]);
+    }
 }

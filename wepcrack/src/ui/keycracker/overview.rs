@@ -9,7 +9,9 @@ use ratatui::{
     Frame,
 };
 
-use super::{KeyCracker, KeyCrackerPhase, KeyCrackerWidget};
+use crate::ui::UIWidget;
+
+use super::{KeyCracker, KeyCrackerPhase};
 
 pub(super) struct OverviewWidget {
     start_time: Instant,
@@ -131,7 +133,9 @@ impl OverviewWidget {
     }
 }
 
-impl KeyCrackerWidget for OverviewWidget {
+impl<'a> UIWidget<'a> for OverviewWidget {
+    type SharedState = KeyCracker<'a>;
+
     fn size(&self) -> Constraint {
         Constraint::Length(2 + 1 + 1 + 1 + 1 + 2)
     }

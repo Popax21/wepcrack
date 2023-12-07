@@ -8,10 +8,11 @@ use ratatui::{
 
 use crate::{
     keycracker::{KeyBytePrediction, KeyTester},
+    ui::UIWidget,
     wep::WepKey,
 };
 
-use super::{KeyCracker, KeyCrackerWidget};
+use super::KeyCracker;
 
 pub(super) struct CandidateKeyTestingWidget;
 
@@ -90,7 +91,9 @@ impl CandidateKeyTestingWidget {
     }
 }
 
-impl KeyCrackerWidget for CandidateKeyTestingWidget {
+impl<'a> UIWidget<'a> for CandidateKeyTestingWidget {
+    type SharedState = KeyCracker<'a>;
+
     fn size(&self) -> Constraint {
         Constraint::Length(5)
     }

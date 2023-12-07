@@ -4,7 +4,13 @@ use crossterm::{
     ExecutableCommand,
 };
 use rand::RngCore;
-use ratatui::{prelude::CrosstermBackend, Terminal};
+use ratatui::{
+    prelude::{Alignment, Constraint, CrosstermBackend, Direction, Layout},
+    style::Stylize,
+    text::Line,
+    widgets::{Block, Borders, Paragraph},
+    Frame, Terminal,
+};
 use std::{
     error::Error,
     sync::{
@@ -17,21 +23,11 @@ use ui::UIScene;
 
 use crate::{keycracker::KeystreamSample, wep::WepKey};
 
-pub mod util;
-
 pub mod keycracker;
 pub mod rc4;
-pub mod wep;
-
 pub mod ui;
-
-const KEYCRACK_SETTINGS: ui::keycracker::KeyCrackerSettings = ui::keycracker::KeyCrackerSettings {
-    key_predictor_threshold: 0.5,
-
-    num_test_samples: 2048,
-    test_sample_period: 128,
-    test_sample_threshold: 0.9,
-};
+pub mod util;
+pub mod wep;
 
 static TERMINAL_LOCK: AtomicBool = AtomicBool::new(true);
 
@@ -104,7 +100,7 @@ impl App<'_> {
         while !should_quit.load(atomic::Ordering::SeqCst) && !self.scene.should_quit() {
             //Draw the current UI scene
             if TERMINAL_LOCK.load(atomic::Ordering::SeqCst) {
-                terminal.draw(|f| self.scene.draw(f))?;
+                terminal.draw(|frame| self.draw(frame))?;
             }
 
             //Poll for events
@@ -126,5 +122,28 @@ impl App<'_> {
         }
 
         Ok(())
+    }
+
+    fn draw(&mut self, frame: &mut Frame) {
+        //Calculate the layout
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(0)])
+            .split(frame.size());
+
+        //Draw the title
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from("WEPCrack".magenta().bold()),
+                Line::from("WEP Key Cracking Demonstration Tool".blue()),
+                Line::from("© Popax21, 2023".blue().italic()),
+            ])
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::BOTTOM)),
+            layout[0],
+        );
+
+        //Draw the scene
+        self.scene.draw(frame, layout[1]);
     }
 }
