@@ -1,6 +1,7 @@
 use crossterm::event::Event;
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
+    widgets::{Block, Borders},
     Frame,
 };
 
@@ -18,7 +19,7 @@ pub trait UIScene {
 pub trait UIWidget<'a> {
     type SharedState;
 
-    fn size(&self) -> Constraint;
+    fn size(&self, shared_state: &Self::SharedState) -> Constraint;
     fn draw(&mut self, shared_state: &Self::SharedState, frame: &mut Frame, area: Rect);
 }
 
@@ -34,7 +35,7 @@ pub fn draw_ui_widgets<'a, S>(
         .constraints(
             widgets
                 .iter()
-                .map(|w| w.size())
+                .map(|w| w.size(state))
                 .chain(std::iter::once(Constraint::Min(0)))
                 .collect::<Vec<_>>(),
         )
@@ -44,4 +45,8 @@ pub fn draw_ui_widgets<'a, S>(
     for (i, widget) in widgets.iter_mut().enumerate() {
         widget.draw(&state, frame, layout[i]);
     }
+}
+
+pub fn draw_ui_widget_border(title: &str, frame: &mut Frame, area: Rect) {
+    frame.render_widget(Block::default().borders(Borders::all()).title(title), area);
 }

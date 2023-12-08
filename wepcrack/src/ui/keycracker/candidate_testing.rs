@@ -2,13 +2,13 @@ use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
     style::Stylize,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
     Frame,
 };
 
 use crate::{
     keycracker::{KeyBytePrediction, KeyTester},
-    ui::UIWidget,
+    ui::{draw_ui_widget_border, UIWidget},
     wep::WepKey,
 };
 
@@ -94,33 +94,26 @@ impl CandidateKeyTestingWidget {
 impl<'a> UIWidget<'a> for CandidateKeyTestingWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self) -> Constraint {
+    fn size(&self, _cracker: &KeyCracker) -> Constraint {
         Constraint::Length(5)
     }
 
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {
         let tester = cracker.key_tester().unwrap();
+        draw_ui_widget_border("Candidate Key Testing", frame, area);
 
         //Calculate the layout
         let [info_layout, cand_key_layout, l_idxs_layout] = Layout::default()
+            .margin(1)
             .constraints([
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
             ])
-            .margin(1)
             .split(area)[..]
         else {
             unreachable!();
         };
-
-        //Draw the border block
-        frame.render_widget(
-            Block::default()
-                .borders(Borders::all())
-                .title("Candidate Key Testing"),
-            area,
-        );
 
         //Draw general info
         self.draw_info(tester, frame, info_layout);

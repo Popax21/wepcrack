@@ -136,7 +136,7 @@ impl OverviewWidget {
 impl<'a> UIWidget<'a> for OverviewWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self) -> Constraint {
+    fn size(&self, _cracker: &KeyCracker) -> Constraint {
         Constraint::Length(2 + 1 + 1 + 1 + 1 + 2)
     }
 
@@ -144,6 +144,7 @@ impl<'a> UIWidget<'a> for OverviewWidget {
         //Calculate the layout
         let [runtime_layout, sample_stats_layout, test_layout, _, progbar_layout] =
             Layout::default()
+                .margin(1)
                 .constraints([
                     Constraint::Length(1),
                     Constraint::Length(1),
@@ -151,7 +152,6 @@ impl<'a> UIWidget<'a> for OverviewWidget {
                     Constraint::Max(1),
                     Constraint::Length(2),
                 ])
-                .margin(1)
                 .split(area)[..]
         else {
             unreachable!();

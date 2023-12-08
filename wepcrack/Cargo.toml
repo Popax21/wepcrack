@@ -9,5 +9,10 @@ edition = "2021"
 crossterm = "0.27.0"
 ctrlc = "3.4.1"
 hex = "0.4.3"
+netlink-packet-core = { version = "0.7.0", default-features = false }
+netlink-packet-generic = "0.3.3"
+netlink-packet-utils = "0.5.2"
+netlink-sys = { version = "0.8.5", default-features = false }
+num_enum = "0.7.1"
 rand = "0.8.5"
 ratatui = "0.24.0"

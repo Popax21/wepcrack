@@ -2,11 +2,15 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Stylize,
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{List, ListItem},
     Frame,
 };
 
-use crate::{keycracker::KeyBytePrediction, ui::UIWidget, wep::WepKey};
+use crate::{
+    keycracker::KeyBytePrediction,
+    ui::{draw_ui_widget_border, UIWidget},
+    wep::WepKey,
+};
 
 use super::KeyCracker;
 
@@ -21,22 +25,18 @@ impl SigmaInfoWidget {
 impl<'a> UIWidget<'a> for SigmaInfoWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self) -> Constraint {
+    fn size(&self, _cracker: &KeyCracker) -> Constraint {
         Constraint::Length(2 + WepKey::LEN_104 as u16)
     }
 
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {
-        let layout = Layout::default()
-            .constraints([Constraint::Length(WepKey::LEN_104 as u16)])
-            .horizontal_margin(2)
-            .vertical_margin(1)
-            .split(area);
+        draw_ui_widget_border("Sigma Sums", frame, area);
 
-        //Draw the border block
-        frame.render_widget(
-            Block::default().borders(Borders::all()).title("Sigma Sums"),
-            area,
-        );
+        //Calculate the layout
+        let layout = Layout::default()
+            .margin(1)
+            .constraints([Constraint::Length(WepKey::LEN_104 as u16)])
+            .split(area);
 
         //Draw the list
         let mut sigma_list = Vec::<ListItem>::new();

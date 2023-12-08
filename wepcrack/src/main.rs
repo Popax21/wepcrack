@@ -3,7 +3,6 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use rand::RngCore;
 use ratatui::{
     prelude::{Alignment, Constraint, CrosstermBackend, Direction, Layout},
     style::Stylize,
@@ -21,9 +20,8 @@ use std::{
 };
 use ui::UIScene;
 
-use crate::{keycracker::KeystreamSample, wep::WepKey};
-
 pub mod keycracker;
+pub mod nl80211;
 pub mod rc4;
 pub mod ui;
 pub mod util;
@@ -32,6 +30,11 @@ pub mod wep;
 static TERMINAL_LOCK: AtomicBool = AtomicBool::new(true);
 
 fn main() -> Result<(), Box<dyn Error>> {
+    //Initialize the app
+    let mut app = App {
+        scene: Box::from(ui::dev_setup::UIDevSetup::new()),
+    };
+
     //Initialize the terminal
     crossterm::terminal::enable_raw_mode()?;
     std::io::stdout().execute(EnterAlternateScreen)?;
@@ -48,27 +51,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     //Run the main UI loop
-    let mut test_key = [0u8; WepKey::LEN_104];
-    rand::thread_rng().fill_bytes(&mut test_key);
-    let test_key: WepKey = WepKey::Wep104Key(test_key);
-
-    let mut random_sample_provider = move || {
-        //Generate a random sample from a random IV
-        let mut sample = KeystreamSample::default();
-        rand::thread_rng().fill_bytes(&mut sample.iv);
-        test_key
-            .create_rc4(&sample.iv)
-            .gen_keystream(&mut sample.keystream);
-
-        sample
-    };
-
-    let mut app = App {
-        scene: Box::from(ui::keycracker::UIKeyCracker::new(
-            KEYCRACK_SETTINGS,
-            &mut random_sample_provider,
-        )),
-    };
     app.run(&mut terminal)?;
 
     //Clean up the terminal
