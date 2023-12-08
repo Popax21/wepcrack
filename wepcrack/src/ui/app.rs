@@ -23,9 +23,9 @@ pub trait UIWidget<'a> {
     fn draw(&mut self, shared_state: &Self::SharedState, frame: &mut Frame, area: Rect);
 }
 
-pub fn draw_ui_widgets<'a, S>(
+pub fn draw_ui_widgets<S>(
     widgets: &mut [&mut dyn UIWidget<SharedState = S>],
-    state: &'a S,
+    state: &S,
     frame: &mut Frame,
     area: Rect,
 ) {
@@ -43,7 +43,7 @@ pub fn draw_ui_widgets<'a, S>(
 
     //Draw widgets
     for (i, widget) in widgets.iter_mut().enumerate() {
-        widget.draw(&state, frame, layout[i]);
+        widget.draw(state, frame, layout[i]);
     }
 }
 

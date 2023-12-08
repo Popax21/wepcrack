@@ -7,7 +7,7 @@ use num_enum::TryFromPrimitive;
 
 use super::{NL80211Attribute, NL80211AttributeTag};
 
-pub const NL80211_FAMILY_ID: &'static str = "nl80211";
+pub const NL80211_FAMILY_ID: &str = "nl80211";
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, TryFromPrimitive, PartialEq, Eq)]
