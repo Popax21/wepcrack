@@ -2,7 +2,7 @@ use crossterm::event::{Event, KeyCode};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Stylize},
-    text::Line,
+    text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
@@ -112,7 +112,11 @@ impl DevListWidget {
 
         //Draw info
         let info_layout = Layout::new()
-            .constraints([Constraint::Length(1), Constraint::Length(1)])
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
             .split(
                 Layout::new()
                     .direction(Direction::Horizontal)
@@ -130,6 +134,40 @@ impl DevListWidget {
         }
         frame.render_widget(Paragraph::new(Line::from(interfaces_line)), info_layout[0]);
 
+        // - RFKill
+        frame.render_widget(
+            Paragraph::new(Line::from({
+                let mut line = Vec::<Span>::new();
+
+                line.push("rfkill: ".into());
+                if let Some(rfkill) = device.rfkill() {
+                    line.push(rfkill.name().bold());
+                    line.push(" (".into());
+
+                    let (hwlock, swlock) = (rfkill.is_hard_locked(), rfkill.is_soft_locked());
+                    if hwlock {
+                        line.push("hwlock".red().bold());
+                    }
+                    if swlock {
+                        if hwlock {
+                            line.push(" ".into());
+                        }
+                        line.push("swlock".light_red().bold());
+                    }
+                    if !hwlock && !swlock {
+                        line.push("unlocked".green().bold());
+                    }
+
+                    line.push(")".into());
+                } else {
+                    line.push("none".gray().bold());
+                }
+
+                line
+            })),
+            info_layout[1],
+        );
+
         // - monitor mode
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -141,7 +179,7 @@ impl DevListWidget {
                 }
                 .bold(),
             ])),
-            info_layout[1],
+            info_layout[2],
         );
     }
 }
@@ -150,7 +188,7 @@ impl UIWidget<'_> for DevListWidget {
     type SharedState = DevManager;
 
     fn size(&self, dev_manager: &DevManager) -> Constraint {
-        Constraint::Length(2 + 3 * dev_manager.devices().len() as u16)
+        Constraint::Length(2 + 4 * dev_manager.devices().len() as u16)
     }
 
     fn draw(&mut self, dev_manager: &DevManager, frame: &mut Frame, area: Rect) {
