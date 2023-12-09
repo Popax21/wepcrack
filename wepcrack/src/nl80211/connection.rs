@@ -90,7 +90,7 @@ impl NL80211Connection {
         if let Some(msg) =
             self.poll_messages::<GenlMessage<NL80211Message>, NL80211Message>(|msg| {
                 if msg.payload.cmd == cmd {
-                    Some(msg.payload.clone())
+                    Some(msg.payload)
                 } else {
                     None
                 }
@@ -109,7 +109,7 @@ impl NL80211Connection {
         let mut msgs = Vec::<NL80211Message>::new();
         self.poll_messages::<GenlMessage<NL80211Message>, ()>(|msg| {
             if msg.payload.cmd == cmd {
-                msgs.push(msg.payload.clone());
+                msgs.push(msg.payload);
             }
             None
         })?;
@@ -125,7 +125,7 @@ impl NL80211Connection {
 
     fn poll_messages<M: NetlinkDeserializable, T>(
         &self,
-        mut cb: impl FnMut(&M) -> Option<T>,
+        mut cb: impl FnMut(M) -> Option<T>,
     ) -> Result<Option<T>, Box<dyn Error>> {
         let mut rx_buf = [0u8; RX_BUFFER_SIZE];
 
@@ -142,6 +142,7 @@ impl NL80211Connection {
             loop {
                 //Parse the message
                 let msg = <NetlinkMessage<M>>::deserialize(&rx_buf[off..])?;
+                let msg_size = msg.header.length as usize;
 
                 match msg.payload {
                     NetlinkPayload::Done(_) => return Ok(None),
@@ -149,7 +150,7 @@ impl NL80211Connection {
                     NetlinkPayload::Noop => {}
                     NetlinkPayload::Overrun(_) => panic!("reached NetlinkPayload::Overrun handler"),
                     NetlinkPayload::InnerMessage(msg) => {
-                        if let Some(res) = cb(&msg) {
+                        if let Some(res) = cb(msg) {
                             return Ok(Some(res));
                         }
                     }
@@ -157,8 +158,8 @@ impl NL80211Connection {
                 }
 
                 //Move onto the next message
-                off += msg.header.length as usize;
-                if msg.header.length == 0 || off >= rx_size {
+                off += msg_size;
+                if msg_size == 0 || off >= rx_size {
                     break;
                 }
             }

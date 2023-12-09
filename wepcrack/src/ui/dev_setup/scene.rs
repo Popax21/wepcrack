@@ -14,10 +14,13 @@ pub struct UIDevSetup {
 impl UIDevSetup {
     #[allow(clippy::new_without_default)]
     pub fn new() -> UIDevSetup {
-        UIDevSetup {
-            dev_manager: DevManager::new().expect("failed to set up nl82011 device manager"),
+        //Create the device manager
+        let dev_manager = DevManager::new().expect("failed to create the device manager");
 
-            dev_list_widget: DevListWidget::new(),
+        UIDevSetup {
+            dev_list_widget: DevListWidget::new(&dev_manager),
+
+            dev_manager,
         }
     }
 }

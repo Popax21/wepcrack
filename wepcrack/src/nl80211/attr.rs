@@ -1,93 +1,102 @@
 use netlink_packet_utils::{
-    byteorder::{ByteOrder, NativeEndian},
     nla::{DefaultNla, Nla, NlaBuffer},
-    parsers::{parse_string, parse_u32},
     DecodeError, Parseable,
 };
 use num_enum::TryFromPrimitive;
 
+use super::{
+    attr_macro::{attr_size, attr_tag, emit_attr, parse_attr},
+    NL80211InterfaceType, NL80211WiphyIndex,
+};
+
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 pub enum NL80211AttributeTag {
-    Unspec,
+    Unspec = 0,
 
-    Whipy,
-    WhipyName,
+    WiphyIndex = 1,
+    WiphyName = 2,
 
-    InterfaceIndex,
-    InterfaceName,
+    InterfaceIndex = 3,
+    InterfaceName = 4,
+    InterfaceType = 5,
+    SupportedInterfaceTypes = 32,
 
-    MAC,
+    MacAddress = 6,
 }
 
 #[allow(unused)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NL80211Attribute {
+    Unknown(DefaultNla),
     Unspec,
 
-    Whipy(u32),
-    WhipyName(String),
+    WiphyIndex(NL80211WiphyIndex),
+    WiphyName(String),
 
     InterfaceIndex(u32),
     InterfaceName(String),
+    InterfaceType(NL80211InterfaceType),
+    SupportedInterfaceTypes(Vec<NL80211InterfaceType>),
 
-    MAC([u8; 6]),
-
-    Unknown(DefaultNla),
+    MacAddress([u8; 6]),
 }
 
 impl Nla for NL80211Attribute {
     fn value_len(&self) -> usize {
         match &self {
-            NL80211Attribute::Unspec => 0,
+            Self::Unknown(nla) => nla.value_len(),
+            _ => attr_size!(NL80211Attribute, &self,
+                Unspec => (),
 
-            //u32 attributes
-            NL80211Attribute::Whipy(_) | NL80211Attribute::InterfaceIndex(_) => {
-                std::mem::size_of::<u32>()
-            }
+                WiphyIndex => u32,
+                WiphyName => String,
 
-            //string attributes
-            NL80211Attribute::WhipyName(s) | NL80211Attribute::InterfaceName(s) => s.len() + 1,
+                InterfaceIndex => u32,
+                InterfaceName => String,
+                InterfaceType => (enum NL80211InterfaceType(u32)),
+                SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-            //special attributes
-            NL80211Attribute::MAC(_) => 6,
-
-            NL80211Attribute::Unknown(nla) => nla.value_len(),
+                MacAddress => [u8; 6]
+            ),
         }
     }
 
     fn kind(&self) -> u16 {
         match &self {
-            NL80211Attribute::Unspec => NL80211AttributeTag::Unspec as u16,
-            NL80211Attribute::Whipy(_) => NL80211AttributeTag::Whipy as u16,
-            NL80211Attribute::WhipyName(_) => NL80211AttributeTag::WhipyName as u16,
-            NL80211Attribute::InterfaceIndex(_) => NL80211AttributeTag::InterfaceIndex as u16,
-            NL80211Attribute::InterfaceName(_) => NL80211AttributeTag::InterfaceName as u16,
-            NL80211Attribute::MAC(_) => NL80211AttributeTag::MAC as u16,
-
-            NL80211Attribute::Unknown(nla) => nla.kind(),
+            Self::Unknown(nla) => nla.kind(),
+            _ => attr_tag!(
+                NL80211Attribute,
+                NL80211AttributeTag,
+                &self,
+                Unspec,
+                WiphyIndex(_),
+                WiphyName(_),
+                InterfaceIndex(_),
+                InterfaceName(_),
+                InterfaceType(_),
+                SupportedInterfaceTypes(_),
+                MacAddress(_)
+            ) as u16,
         }
     }
 
-    fn emit_value(&self, buffer: &mut [u8]) {
+    fn emit_value(&self, buf: &mut [u8]) {
         match &self {
-            NL80211Attribute::Unspec => {}
+            Self::Unknown(nla) => nla.emit_value(buf),
+            _ => emit_attr!(NL80211Attribute, &self, buf,
+                Unspec => (),
 
-            //u32 attributes
-            NL80211Attribute::Whipy(v) | NL80211Attribute::InterfaceIndex(v) => {
-                NativeEndian::write_u32(buffer, *v)
-            }
+                WiphyIndex => u32,
+                WiphyName => String,
 
-            //string attributes
-            NL80211Attribute::WhipyName(s) | NL80211Attribute::InterfaceName(s) => {
-                buffer[..s.len()].copy_from_slice(s.as_bytes());
-                buffer[s.len()] = 0;
-            }
+                InterfaceIndex => u32,
+                InterfaceName => String,
+                InterfaceType => (enum NL80211InterfaceType(u32)),
+                SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-            //special attributes
-            NL80211Attribute::MAC(mac) => buffer[..6].copy_from_slice(mac),
-
-            NL80211Attribute::Unknown(nla) => nla.emit_value(buffer),
+                MacAddress => [u8; 6]
+            ),
         }
     }
 }
@@ -98,41 +107,18 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for NL80211Attribu
             return Ok(NL80211Attribute::Unknown(DefaultNla::parse(buf)?));
         };
 
-        let check_buffer_len = |len: usize| -> Result<(), DecodeError> {
-            if buf.value_length() == len {
-                Ok(())
-            } else {
-                Err(DecodeError::from(
-                    "unexpected nl80211 attribute payload length",
-                ))
-            }
-        };
+        Ok(parse_attr!(NL80211Attribute, NL80211AttributeTag, tag, buf,
+            Unspec => (),
 
-        Ok(match tag {
-            NL80211AttributeTag::Unspec => {
-                check_buffer_len(0)?;
-                NL80211Attribute::Unspec
-            }
+            WiphyIndex => u32,
+            WiphyName => String,
 
-            NL80211AttributeTag::Whipy => NL80211Attribute::Whipy(parse_u32(buf.value())?),
-            NL80211AttributeTag::WhipyName => {
-                NL80211Attribute::WhipyName(parse_string(buf.value())?)
-            }
+            InterfaceIndex => u32,
+            InterfaceName => String,
+            InterfaceType => (enum NL80211InterfaceType((u32 as u16))),
+            SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-            NL80211AttributeTag::InterfaceIndex => {
-                NL80211Attribute::InterfaceIndex(parse_u32(buf.value())?)
-            }
-            NL80211AttributeTag::InterfaceName => {
-                NL80211Attribute::InterfaceName(parse_string(buf.value())?)
-            }
-
-            NL80211AttributeTag::MAC => NL80211Attribute::MAC({
-                check_buffer_len(6)?;
-
-                let mut mac = [0u8; 6];
-                mac.copy_from_slice(buf.value());
-                mac
-            }),
-        })
+            MacAddress => [u8; 6]
+        ))
     }
 }

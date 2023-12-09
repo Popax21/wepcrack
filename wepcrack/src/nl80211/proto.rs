@@ -33,9 +33,38 @@ pub struct NL80211Message {
 }
 
 impl NL80211Message {
-    pub fn find_attr(&self, attr_tag: NL80211AttributeTag) -> Option<&NL80211Attribute> {
-        self.nlas.iter().find(|attr| attr.kind() == attr_tag as u16)
+    pub fn steal_attribute(&mut self, attr_tag: NL80211AttributeTag) -> Option<NL80211Attribute> {
+        let Some(idx) = self
+            .nlas
+            .iter()
+            .position(|attr| attr.kind() == attr_tag as u16)
+        else {
+            return None;
+        };
+
+        Some(std::mem::replace(
+            &mut self.nlas[idx],
+            NL80211Attribute::Unspec,
+        ))
     }
+
+    pub fn steal_required_attribute(&mut self, attr_tag: NL80211AttributeTag) -> NL80211Attribute {
+        let Some(attr) = self.steal_attribute(attr_tag) else {
+            panic!("nl80211 message lacks required attribute: {attr_tag:?}");
+        };
+        attr
+    }
+}
+
+#[macro_export]
+macro_rules! steal_msg_attr {
+    ($tag:ident($name:ident) = $msg:expr) => {
+        let NL80211Attribute::$tag($name) =
+            $msg.steal_required_attribute(NL80211AttributeTag::$tag)
+        else {
+            unreachable!();
+        };
+    };
 }
 
 impl GenlFamily for NL80211Message {

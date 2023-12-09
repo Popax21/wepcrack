@@ -1,23 +1,28 @@
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
-    prelude::{Constraint, Layout, Rect},
-    style::Stylize,
+    prelude::{Constraint, Direction, Layout, Rect},
+    style::{Color, Stylize},
     text::Line,
-    widgets::{HighlightSpacing, List, ListItem, ListState},
+    widgets::Paragraph,
+    Frame,
 };
 
 use crate::ui::{draw_ui_widget_border, UIWidget};
 
-use super::dev_manager::DevManager;
+use super::{dev_manager::Device, DevManager};
 
 pub(super) struct DevListWidget {
-    whipy_list_state: ListState,
+    selected_device_idx: usize,
 }
 
 impl DevListWidget {
-    pub fn new() -> DevListWidget {
+    pub fn new(dev_manager: &DevManager) -> DevListWidget {
         DevListWidget {
-            whipy_list_state: ListState::default().with_selected(Some(0)),
+            selected_device_idx: dev_manager
+                .devices()
+                .iter()
+                .position(Device::is_suitable)
+                .unwrap_or_default(),
         }
     }
 }
@@ -25,24 +30,119 @@ impl DevListWidget {
 impl DevListWidget {
     pub fn handle_event(&mut self, dev_manager: &DevManager, event: &Event) {
         if let Event::Key(key) = event {
-            //Handle whipy list selection
-            if let Some(selected) = self.whipy_list_state.selected() {
-                let mut selected = selected as isize;
-                match key.code {
-                    KeyCode::Up => {
-                        selected -= 1;
-                    }
-                    KeyCode::Down => {
-                        selected += 1;
-                    }
-                    _ => {}
-                };
+            //Handle device list selection
+            let dir = match key.code {
+                KeyCode::Up => -1isize,
+                KeyCode::Down => 1isize,
+                _ => return,
+            };
 
-                self.whipy_list_state.select(Some(
-                    selected.rem_euclid(dev_manager.whipys().len() as isize) as usize,
-                ));
+            //Move up/down the list until we find a new suitable device
+            let mut idx = self.selected_device_idx as isize;
+            loop {
+                //Move one up/down the list
+                idx = (idx + dir).rem_euclid(dev_manager.devices().len() as isize);
+
+                //Check if we wrapped around to our original selection
+                if idx == self.selected_device_idx as isize {
+                    break;
+                }
+
+                //Check if we landed on a suitable device
+                if dev_manager.devices()[idx as usize].is_suitable() {
+                    self.selected_device_idx = idx as usize;
+                    break;
+                }
             }
         }
+    }
+
+    fn draw_device_list_entry_header(
+        &self,
+        device: &Device,
+        frame: &mut Frame,
+        area: Rect,
+        is_selected: bool,
+    ) {
+        let [selected_area, name_area] = *Layout::new()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .split(area)
+        else {
+            unreachable!();
+        };
+
+        // - selection highlight
+        frame.render_widget(
+            Paragraph::new(if device.is_suitable() {
+                if is_selected { " > " } else { "   " }.into()
+            } else {
+                " x ".red()
+            }),
+            selected_area,
+        );
+
+        // - name
+        frame.render_widget(
+            Paragraph::new(device.name().bold().fg(if device.is_suitable() {
+                Color::Cyan
+            } else {
+                Color::Red
+            })),
+            name_area,
+        );
+    }
+
+    fn draw_device_list_entry(
+        &self,
+        device: &Device,
+        frame: &mut Frame,
+        area: Rect,
+        is_selected: bool,
+    ) {
+        let [header_area, info_area] = *Layout::new()
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
+            .split(area)
+        else {
+            unreachable!();
+        };
+
+        //Draw the header
+        self.draw_device_list_entry_header(device, frame, header_area, is_selected);
+
+        //Draw info
+        let info_layout = Layout::new()
+            .constraints([Constraint::Length(1), Constraint::Length(1)])
+            .split(
+                Layout::new()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Length(5), Constraint::Min(0)])
+                    .split(info_area)[1],
+            );
+
+        // - interfaces
+        let mut interfaces_line = vec!["interfaces: ".into()];
+        for interf in device.interfaces() {
+            if interfaces_line.len() > 1 {
+                interfaces_line.push(", ".into());
+            }
+            interfaces_line.push(interf.name().bold());
+        }
+        frame.render_widget(Paragraph::new(Line::from(interfaces_line)), info_layout[0]);
+
+        // - monitor mode
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                "monitor mode: ".into(),
+                if device.supports_monitor_mode() {
+                    "supported".green()
+                } else {
+                    "not supported".red()
+                }
+                .bold(),
+            ])),
+            info_layout[1],
+        );
     }
 }
 
@@ -50,31 +150,27 @@ impl UIWidget<'_> for DevListWidget {
     type SharedState = DevManager;
 
     fn size(&self, dev_manager: &DevManager) -> Constraint {
-        Constraint::Length(2 + dev_manager.whipys().len() as u16)
+        Constraint::Length(2 + 3 * dev_manager.devices().len() as u16)
     }
 
-    fn draw(&mut self, dev_manager: &DevManager, frame: &mut ratatui::Frame, area: Rect) {
+    fn draw(&mut self, dev_manager: &DevManager, frame: &mut Frame, area: Rect) {
         draw_ui_widget_border("Device List", frame, area);
 
         //Calculate the layout
         let layout = Layout::new()
             .margin(1)
-            .constraints([Constraint::Length(dev_manager.whipys().len() as u16)])
+            .constraints(
+                dev_manager
+                    .devices()
+                    .iter()
+                    .map(|_| Constraint::Length(3))
+                    .collect::<Vec<_>>(),
+            )
             .split(area);
 
-        //Draw the whipy list
-        let mut whipy_items = Vec::<ListItem>::new();
-
-        for whipy in dev_manager.whipys() {
-            whipy_items.push(ListItem::new(Line::from(whipy.name().bold().cyan())));
+        //Draw the device list
+        for (idx, dev) in dev_manager.devices().iter().enumerate() {
+            self.draw_device_list_entry(dev, frame, layout[idx], idx == self.selected_device_idx);
         }
-
-        frame.render_stateful_widget(
-            List::new(whipy_items)
-                .highlight_symbol("> ")
-                .highlight_spacing(HighlightSpacing::Always),
-            layout[0],
-            &mut self.whipy_list_state,
-        );
     }
 }

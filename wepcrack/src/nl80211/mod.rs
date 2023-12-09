@@ -1,9 +1,12 @@
 mod attr;
+mod attr_macro;
 mod connection;
+mod interface;
 mod proto;
-mod whipy;
+mod wiphy;
 
 pub use attr::*;
 pub use connection::*;
+pub use interface::*;
 pub use proto::*;
-pub use whipy::*;
+pub use wiphy::*;
