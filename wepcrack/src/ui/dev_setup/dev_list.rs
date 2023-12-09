@@ -132,6 +132,9 @@ impl DevListWidget {
             }
             interfaces_line.push(interf.name().bold());
         }
+        if device.interfaces().is_empty() {
+            interfaces_line.push("none".gray());
+        }
         frame.render_widget(Paragraph::new(Line::from(interfaces_line)), info_layout[0]);
 
         // - RFKill
