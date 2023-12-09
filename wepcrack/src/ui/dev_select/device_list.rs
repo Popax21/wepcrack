@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Stylize},
@@ -9,16 +9,16 @@ use ratatui::{
 
 use crate::ui::{draw_ui_widget_border, UIWidget};
 
-use super::{DevManager, Device};
+use super::{Device, DeviceList};
 
-pub(super) struct DevListWidget {
+pub(super) struct DeviceListWidget {
     selected_device_idx: usize,
 }
 
-impl DevListWidget {
-    pub fn new(dev_manager: &DevManager) -> DevListWidget {
-        DevListWidget {
-            selected_device_idx: dev_manager
+impl DeviceListWidget {
+    pub fn new(dev_list: &DeviceList) -> DeviceListWidget {
+        DeviceListWidget {
+            selected_device_idx: dev_list
                 .devices()
                 .iter()
                 .position(Device::is_suitable)
@@ -27,9 +27,13 @@ impl DevListWidget {
     }
 }
 
-impl DevListWidget {
-    pub fn handle_event(&mut self, dev_manager: &DevManager, event: &Event) {
+impl DeviceListWidget {
+    pub fn handle_event(&mut self, dev_list: &DeviceList, event: &Event) {
         if let Event::Key(key) = event {
+            if key.kind == KeyEventKind::Release {
+                return;
+            }
+
             //Handle device list selection
             let dir = match key.code {
                 KeyCode::Up => -1isize,
@@ -41,7 +45,7 @@ impl DevListWidget {
             let mut idx = self.selected_device_idx as isize;
             loop {
                 //Move one up/down the list
-                idx = (idx + dir).rem_euclid(dev_manager.devices().len() as isize);
+                idx = (idx + dir).rem_euclid(dev_list.devices().len() as isize);
 
                 //Check if we wrapped around to our original selection
                 if idx == self.selected_device_idx as isize {
@@ -49,7 +53,7 @@ impl DevListWidget {
                 }
 
                 //Check if we landed on a suitable device
-                if dev_manager.devices()[idx as usize].is_suitable() {
+                if dev_list.devices()[idx as usize].is_suitable() {
                     self.selected_device_idx = idx as usize;
                     break;
                 }
@@ -57,8 +61,8 @@ impl DevListWidget {
         }
     }
 
-    pub fn selected_device<'a>(&self, dev_manager: &'a DevManager) -> Option<&'a Device> {
-        let dev = &dev_manager.devices()[self.selected_device_idx];
+    pub fn selected_device<'a>(&self, dev_list: &'a DeviceList) -> Option<&'a Device> {
+        let dev = &dev_list.devices()[self.selected_device_idx];
         if dev.is_suitable() {
             Some(dev)
         } else {
@@ -196,21 +200,21 @@ impl DevListWidget {
     }
 }
 
-impl UIWidget<'_> for DevListWidget {
-    type SharedState = DevManager;
+impl UIWidget<'_> for DeviceListWidget {
+    type SharedState = DeviceList;
 
-    fn size(&self, dev_manager: &DevManager) -> Constraint {
-        Constraint::Length(2 + 4 * dev_manager.devices().len() as u16)
+    fn size(&self, dev_list: &DeviceList) -> Constraint {
+        Constraint::Length(2 + 4 * dev_list.devices().len() as u16)
     }
 
-    fn draw(&mut self, dev_manager: &DevManager, frame: &mut Frame, area: Rect) {
+    fn draw(&mut self, dev_list: &DeviceList, frame: &mut Frame, area: Rect) {
         draw_ui_widget_border("Device List", frame, area);
 
         //Calculate the layout
         let layout = Layout::new()
             .margin(1)
             .constraints(
-                dev_manager
+                dev_list
                     .devices()
                     .iter()
                     .map(|_| Constraint::Length(3))
@@ -219,7 +223,7 @@ impl UIWidget<'_> for DevListWidget {
             .split(area);
 
         //Draw the device list
-        for (idx, dev) in dev_manager.devices().iter().enumerate() {
+        for (idx, dev) in dev_list.devices().iter().enumerate() {
             self.draw_device_list_entry(dev, frame, layout[idx], idx == self.selected_device_idx);
         }
     }

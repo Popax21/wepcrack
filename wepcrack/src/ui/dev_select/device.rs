@@ -1,13 +1,8 @@
-use std::{
-    borrow::Cow,
-    cell::{Ref, RefCell},
-    error::Error,
-    path::PathBuf,
-};
+use std::{error::Error, path::PathBuf};
+
+use anyhow::Context;
 
 use crate::nl80211::{NL80211Connection, NL80211Interface, NL80211InterfaceType, NL80211Wiphy};
-
-use super::{LogBuffer, LogLevel, LogLine};
 
 pub(super) struct Device {
     wiphy: NL80211Wiphy,
@@ -49,6 +44,10 @@ impl Device {
 
     pub fn name(&self) -> &str {
         self.wiphy.name()
+    }
+
+    pub const fn wiphy(&self) -> &NL80211Wiphy {
+        &self.wiphy
     }
 
     pub fn interfaces(&self) -> &[NL80211Interface] {
@@ -108,21 +107,15 @@ impl DeviceRFKill {
     }
 }
 
-pub(super) struct DevManager {
-    log_buf: RefCell<LogBuffer>,
+pub(super) struct DeviceList(Vec<Device>);
 
-    nl82011_con: NL80211Connection,
-    devices: Vec<Device>,
-}
-
-impl DevManager {
-    pub fn new(max_log_lines: usize) -> Result<DevManager, Box<dyn Error>> {
-        //Create a new nl80211 connection
-        let nl82011_con: NL80211Connection = NL80211Connection::new()?;
-
+impl DeviceList {
+    pub fn query_list(nl80211_con: &NL80211Connection) -> Result<DeviceList, Box<dyn Error>> {
         //Obtain a list of all nl80211 wiphys and interfaces
-        let wiphys = NL80211Wiphy::query_list(&nl82011_con)?;
-        let interfaces = NL80211Interface::query_list(&nl82011_con)?;
+        let wiphys =
+            NL80211Wiphy::query_list(nl80211_con).context("failed to query nl80211 wiphy list")?;
+        let interfaces = NL80211Interface::query_list(nl80211_con)
+            .context("failed to query nl80211 device list")?;
 
         //Create a list of all devices
         let mut devices = wiphys
@@ -134,38 +127,10 @@ impl DevManager {
             devices[interf.wiphy() as usize].interfaces.push(interf);
         }
 
-        Ok(DevManager {
-            log_buf: RefCell::new(LogBuffer::new(max_log_lines)),
-
-            nl82011_con,
-            devices,
-        })
-    }
-
-    pub fn log_buffer(&self) -> Ref<LogBuffer> {
-        self.log_buf.borrow()
+        Ok(DeviceList(devices))
     }
 
     pub fn devices(&self) -> &[Device] {
-        &self.devices
-    }
-
-    pub fn log(&self, line: LogLine) {
-        self.log_buf.borrow_mut().add_line(line);
-    }
-
-    #[allow(unused)]
-    pub fn log_info(&self, line: impl Into<Cow<'static, str>>) {
-        self.log(LogLine(LogLevel::Info, line.into()));
-    }
-
-    #[allow(unused)]
-    pub fn log_warn(&self, line: impl Into<Cow<'static, str>>) {
-        self.log(LogLine(LogLevel::Warning, line.into()));
-    }
-
-    #[allow(unused)]
-    pub fn log_err(&self, line: impl Into<Cow<'static, str>>) {
-        self.log(LogLine(LogLevel::Error, line.into()));
+        &self.0
     }
 }

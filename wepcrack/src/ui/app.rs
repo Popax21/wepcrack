@@ -5,10 +5,6 @@ use ratatui::{
     Frame,
 };
 
-pub trait UIApp {
-    fn set_scene(&mut self, scene: impl UIScene);
-}
-
 pub trait UIScene {
     fn should_quit(&self) -> bool;
 

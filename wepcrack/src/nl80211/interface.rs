@@ -38,33 +38,40 @@ pub struct NL80211Interface {
 }
 
 impl NL80211Interface {
-    pub fn from_message(mut msg: NL80211Message) -> NL80211Interface {
+    pub fn from_message(mut msg: NL80211Message) -> Option<NL80211Interface> {
         msg.verify_cmd(NL80211Command::NewInterface);
-        steal_msg_attr!(InterfaceIndex(index) = msg);
+
+        let Some(NL80211Attribute::InterfaceIndex(index)) =
+            msg.steal_attribute(NL80211AttributeTag::InterfaceIndex)
+        else {
+            return None;
+        };
+
         steal_msg_attr!(InterfaceName(name) = msg);
         steal_msg_attr!(InterfaceType(interface_type) = msg);
         steal_msg_attr!(MacAddress(mac_address) = msg);
         steal_msg_attr!(WiphyIndex(wiphy) = msg);
 
-        NL80211Interface {
+        Some(NL80211Interface {
             index,
             name,
             interface_type,
             mac_address,
             wiphy,
-        }
+        })
     }
 
     pub fn from_index(
         con: &NL80211Connection,
         idx: NL80211WiphyIndex,
     ) -> anyhow::Result<NL80211Interface> {
-        Ok(Self::from_message(con.send_get_request(
-            NL80211Message {
-                cmd: NL80211Command::GetInterface,
-                nlas: vec![NL80211Attribute::InterfaceIndex(idx)],
-            },
-        )?))
+        Ok(Self::from_message(con.send_get_request(NL80211Message {
+            cmd: NL80211Command::GetInterface,
+            nlas: vec![NL80211Attribute::InterfaceIndex(idx)],
+        })?)
+        .ok_or(anyhow::anyhow!(
+            "nl80211 interface with index {idx} is not a valid interface"
+        ))?)
     }
 
     pub fn query_list(con: &NL80211Connection) -> anyhow::Result<Vec<NL80211Interface>> {
@@ -74,7 +81,7 @@ impl NL80211Interface {
                 nlas: vec![],
             })?
             .into_iter()
-            .map(Self::from_message)
+            .flat_map(Self::from_message)
             .collect())
     }
 
@@ -84,16 +91,15 @@ impl NL80211Interface {
         name: &str,
         interface_type: NL80211InterfaceType,
     ) -> anyhow::Result<NL80211Interface> {
-        Ok(Self::from_message(con.send_get_request(
-            NL80211Message {
-                cmd: NL80211Command::NewInterface,
-                nlas: vec![
-                    NL80211Attribute::WiphyIndex(wiphy.index()),
-                    NL80211Attribute::InterfaceName(name.to_owned()),
-                    NL80211Attribute::InterfaceType(interface_type),
-                ],
-            },
-        )?))
+        Ok(Self::from_message(con.send_get_request(NL80211Message {
+            cmd: NL80211Command::NewInterface,
+            nlas: vec![
+                NL80211Attribute::WiphyIndex(wiphy.index()),
+                NL80211Attribute::InterfaceName(name.to_owned()),
+                NL80211Attribute::InterfaceType(interface_type),
+            ],
+        })?)
+        .unwrap())
     }
 
     pub const fn index(&self) -> NL80211InterfaceIndex {

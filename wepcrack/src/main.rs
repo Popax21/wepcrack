@@ -1,25 +1,15 @@
 use crossterm::{
-    event::{self, Event, KeyCode},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::{
-    prelude::{Alignment, Constraint, CrosstermBackend, Direction, Layout},
-    style::Stylize,
-    text::Line,
-    widgets::{Block, Borders, Paragraph},
-    Frame, Terminal,
-};
+use ratatui::{prelude::CrosstermBackend, Terminal};
 use std::{
     error::Error,
-    sync::{
-        atomic::{self, AtomicBool},
-        Arc,
-    },
-    time::Duration,
+    sync::atomic::{self, AtomicBool},
 };
-use ui::UIScene;
 
+pub mod app;
+pub mod ieee80211;
 pub mod keycracker;
 pub mod nl80211;
 pub mod rc4;
@@ -30,10 +20,8 @@ pub mod wep;
 static TERMINAL_LOCK: AtomicBool = AtomicBool::new(true);
 
 fn main() -> Result<(), Box<dyn Error>> {
-    //Initialize the app
-    let mut app = App {
-        scene: Box::from(ui::dev_setup::UIDevSetup::new()),
-    };
+    //Create the app
+    let mut app = app::App::create()?;
 
     //Initialize the terminal
     crossterm::terminal::enable_raw_mode()?;
@@ -60,72 +48,4 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
-}
-
-struct App<'a> {
-    scene: Box<dyn UIScene + 'a>,
-}
-
-impl App<'_> {
-    fn run(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-    ) -> Result<(), Box<dyn Error>> {
-        //Install a Ctrl+C handler
-        let should_quit = Arc::new(atomic::AtomicBool::new(false));
-        {
-            let should_quit = should_quit.clone();
-            ctrlc::set_handler(move || should_quit.store(true, atomic::Ordering::SeqCst))?;
-        }
-
-        //Run the main UI loop
-        while !should_quit.load(atomic::Ordering::SeqCst) && !self.scene.should_quit() {
-            //Draw the current UI scene
-            if TERMINAL_LOCK.load(atomic::Ordering::SeqCst) {
-                terminal.draw(|frame| self.draw(frame))?;
-            }
-
-            //Poll for events
-            if event::poll(Duration::from_millis(10))? {
-                while event::poll(Duration::from_millis(0))? {
-                    let evt = event::read()?;
-
-                    //Quit on Esc
-                    if let Event::Key(key) = &evt {
-                        if key.code == KeyCode::Esc {
-                            return Ok(());
-                        }
-                    }
-
-                    //Let the scene handle it
-                    self.scene.handle_event(&evt);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn draw(&mut self, frame: &mut Frame) {
-        //Calculate the layout
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(4), Constraint::Min(0)])
-            .split(frame.size());
-
-        //Draw the title
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::from("WEPCrack".magenta().bold()),
-                Line::from("WEP Key Cracking Demonstration Tool".blue()),
-                Line::from("© Popax21, 2023".blue().italic()),
-            ])
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::BOTTOM)),
-            layout[0],
-        );
-
-        //Draw the scene
-        self.scene.draw(frame, layout[1]);
-    }
 }
