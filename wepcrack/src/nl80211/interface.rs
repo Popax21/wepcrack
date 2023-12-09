@@ -1,12 +1,10 @@
-use std::error::Error;
-
 use num_enum::TryFromPrimitive;
 
 use crate::steal_msg_attr;
 
 use super::{
     NL80211Attribute, NL80211AttributeTag, NL80211Command, NL80211Connection, NL80211Message,
-    NL80211WiphyIndex,
+    NL80211Wiphy, NL80211WiphyIndex,
 };
 
 #[repr(u16)]
@@ -41,6 +39,7 @@ pub struct NL80211Interface {
 
 impl NL80211Interface {
     pub fn from_message(mut msg: NL80211Message) -> NL80211Interface {
+        msg.verify_cmd(NL80211Command::NewInterface);
         steal_msg_attr!(InterfaceIndex(index) = msg);
         steal_msg_attr!(InterfaceName(name) = msg);
         steal_msg_attr!(InterfaceType(interface_type) = msg);
@@ -59,33 +58,42 @@ impl NL80211Interface {
     pub fn from_index(
         con: &NL80211Connection,
         idx: NL80211WiphyIndex,
-    ) -> Result<NL80211Interface, Box<dyn Error>> {
-        //Send a GET_INTERFACE request
-        con.send_request(
+    ) -> anyhow::Result<NL80211Interface> {
+        Ok(Self::from_message(con.send_get_request(
             NL80211Message {
                 cmd: NL80211Command::GetInterface,
-                nlas: vec![NL80211Attribute::WiphyIndex(idx)],
+                nlas: vec![NL80211Attribute::InterfaceIndex(idx)],
             },
-            false,
-        )?;
-
-        Ok(Self::from_message(
-            con.recv_response(NL80211Command::NewInterface)?,
-        ))
+        )?))
     }
 
-    pub fn query_list(con: &NL80211Connection) -> Result<Vec<NL80211Interface>, Box<dyn Error>> {
-        //Send a dump GET_INTERFACE request
-        con.send_request(
-            NL80211Message {
+    pub fn query_list(con: &NL80211Connection) -> anyhow::Result<Vec<NL80211Interface>> {
+        Ok(con
+            .send_dump_request(NL80211Message {
                 cmd: NL80211Command::GetInterface,
                 nlas: vec![],
-            },
-            true,
-        )?;
+            })?
+            .into_iter()
+            .map(Self::from_message)
+            .collect())
+    }
 
-        let wiphys = con.recv_dump_response(NL80211Command::NewInterface)?;
-        Ok(wiphys.into_iter().map(Self::from_message).collect())
+    pub fn create_new(
+        con: &NL80211Connection,
+        wiphy: &NL80211Wiphy,
+        name: &str,
+        interface_type: NL80211InterfaceType,
+    ) -> anyhow::Result<NL80211Interface> {
+        Ok(Self::from_message(con.send_get_request(
+            NL80211Message {
+                cmd: NL80211Command::NewInterface,
+                nlas: vec![
+                    NL80211Attribute::WiphyIndex(wiphy.index()),
+                    NL80211Attribute::InterfaceName(name.to_owned()),
+                    NL80211Attribute::InterfaceType(interface_type),
+                ],
+            },
+        )?))
     }
 
     pub const fn index(&self) -> NL80211InterfaceIndex {
@@ -106,5 +114,17 @@ impl NL80211Interface {
 
     pub const fn wiphy(&self) -> NL80211WiphyIndex {
         self.wiphy
+    }
+
+    pub fn delete(&self, con: &NL80211Connection) -> anyhow::Result<()> {
+        con.send_acked_request(NL80211Message {
+            cmd: NL80211Command::DelInterface,
+            nlas: vec![
+                NL80211Attribute::WiphyIndex(self.wiphy),
+                NL80211Attribute::InterfaceIndex(self.index),
+            ],
+        })?;
+
+        Ok(())
     }
 }

@@ -1,3 +1,5 @@
+use core::panic;
+
 use netlink_packet_generic::{GenlFamily, GenlHeader};
 use netlink_packet_utils::{
     nla::{Nla, NlasIterator},
@@ -33,6 +35,15 @@ pub struct NL80211Message {
 }
 
 impl NL80211Message {
+    pub fn verify_cmd(&self, cmd: NL80211Command) {
+        if self.cmd != cmd {
+            panic!(
+                "unexpected nl80211 message command: expected {cmd:?}, got {:?}",
+                self.cmd
+            );
+        }
+    }
+
     pub fn steal_attribute(&mut self, attr_tag: NL80211AttributeTag) -> Option<NL80211Attribute> {
         let Some(idx) = self
             .nlas
