@@ -1,6 +1,13 @@
-use std::{error::Error, path::PathBuf};
+use std::{
+    borrow::Cow,
+    cell::{Ref, RefCell},
+    error::Error,
+    path::PathBuf,
+};
 
 use crate::nl80211::{NL80211Connection, NL80211Interface, NL80211InterfaceType, NL80211Wiphy};
+
+use super::{LogBuffer, LogLevel, LogLine};
 
 pub(super) struct Device {
     wiphy: NL80211Wiphy,
@@ -102,12 +109,14 @@ impl DeviceRFKill {
 }
 
 pub(super) struct DevManager {
+    log_buf: RefCell<LogBuffer>,
+
     nl82011_con: NL80211Connection,
     devices: Vec<Device>,
 }
 
 impl DevManager {
-    pub fn new() -> Result<DevManager, Box<dyn Error>> {
+    pub fn new(max_log_lines: usize) -> Result<DevManager, Box<dyn Error>> {
         //Create a new nl80211 connection
         let nl82011_con: NL80211Connection = NL80211Connection::new()?;
 
@@ -126,12 +135,37 @@ impl DevManager {
         }
 
         Ok(DevManager {
+            log_buf: RefCell::new(LogBuffer::new(max_log_lines)),
+
             nl82011_con,
             devices,
         })
     }
 
+    pub fn log_buffer(&self) -> Ref<LogBuffer> {
+        self.log_buf.borrow()
+    }
+
     pub fn devices(&self) -> &[Device] {
         &self.devices
+    }
+
+    pub fn log(&self, line: LogLine) {
+        self.log_buf.borrow_mut().add_line(line);
+    }
+
+    #[allow(unused)]
+    pub fn log_info(&self, line: impl Into<Cow<'static, str>>) {
+        self.log(LogLine(LogLevel::Info, line.into()));
+    }
+
+    #[allow(unused)]
+    pub fn log_warn(&self, line: impl Into<Cow<'static, str>>) {
+        self.log(LogLine(LogLevel::Warning, line.into()));
+    }
+
+    #[allow(unused)]
+    pub fn log_err(&self, line: impl Into<Cow<'static, str>>) {
+        self.log(LogLine(LogLevel::Error, line.into()));
     }
 }

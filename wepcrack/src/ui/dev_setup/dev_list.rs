@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::ui::{draw_ui_widget_border, UIWidget};
 
-use super::{dev_manager::Device, DevManager};
+use super::{DevManager, Device};
 
 pub(super) struct DevListWidget {
     selected_device_idx: usize,
@@ -54,6 +54,15 @@ impl DevListWidget {
                     break;
                 }
             }
+        }
+    }
+
+    pub fn selected_device<'a>(&self, dev_manager: &'a DevManager) -> Option<&'a Device> {
+        let dev = &dev_manager.devices()[self.selected_device_idx];
+        if dev.is_suitable() {
+            Some(dev)
+        } else {
+            None
         }
     }
 
