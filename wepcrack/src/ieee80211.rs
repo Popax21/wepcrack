@@ -1,7 +1,7 @@
-use std::{io::Read, os::fd::AsRawFd};
+use std::io::Read;
 
 use anyhow::Context;
-use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, ETH_P_ALL, SOCK_RAW};
+use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, SOCK_RAW};
 use netlink_packet_route::{
     link::{LinkFlag, LinkLayerType, LinkMessage},
     AddressFamily, RouteNetlinkMessage,
