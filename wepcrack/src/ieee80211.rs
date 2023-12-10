@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use anyhow::Context;
-use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, SOCK_RAW};
+use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, ETH_P_ALL, SOCK_RAW};
 use netlink_packet_route::{
     link::{LinkFlag, LinkLayerType, LinkMessage},
     AddressFamily, RouteNetlinkMessage,
@@ -90,7 +90,7 @@ impl IEEE80211Monitor {
             //Setup the bind address
             *std::mem::transmute::<_, &mut sockaddr_ll>(&mut sockaddr) = sockaddr_ll {
                 sll_family: AF_PACKET as u16,
-                sll_protocol: 0,
+                sll_protocol: (ETH_P_ALL as u16).to_be(),
                 sll_ifindex: mon_interface.index() as i32,
                 sll_hatype: 0,
                 sll_pkttype: 0,
@@ -102,8 +102,6 @@ impl IEEE80211Monitor {
         packet_socket
             .bind(&unsafe { SockAddr::new(sockaddr, std::mem::size_of::<sockaddr_ll>() as u32) })
             .context("failed to bind the PF_PACKET socket to the monitor interface")?;
-
-        packet_socket.set_read_timeout(Some(std::time::Duration::from_secs(1)))?;
 
         //Disarm drop guards
         mon_guard.disarm();
