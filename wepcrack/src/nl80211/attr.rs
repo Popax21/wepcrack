@@ -6,7 +6,7 @@ use num_enum::TryFromPrimitive;
 
 use super::{
     attr_macro::{attr_size, attr_tag, emit_attr, parse_attr},
-    NL80211InterfaceType, NL80211WiphyIndex,
+    NL80211ChannelWidth, NL80211InterfaceType, NL80211RegulatoryRule, NL80211WiphyIndex,
 };
 
 #[repr(u16)]
@@ -23,10 +23,19 @@ pub enum NL80211AttributeTag {
     SupportedInterfaceTypes = 32,
 
     MacAddress = 6,
+
+    RegAlpha2 = 33,
+    RegRules = 34,
+    DFSRegion = 146,
+
+    WiphyFreq = 38,
+    ChannelWidth = 159,
+    CenterFreq1 = 160,
+    CenterFreq2 = 161,
 }
 
 #[allow(unused)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub enum NL80211Attribute {
     Unknown(DefaultNla),
     Unspec,
@@ -40,6 +49,15 @@ pub enum NL80211Attribute {
     SupportedInterfaceTypes(Vec<NL80211InterfaceType>),
 
     MacAddress([u8; 6]),
+
+    RegAlpha2(String),
+    RegRules(Vec<NL80211RegulatoryRule>),
+    DFSRegion(u8),
+
+    WiphyFreq(u32),
+    ChannelWidth(NL80211ChannelWidth),
+    CenterFreq1(u32),
+    CenterFreq2(u32),
 }
 
 impl Nla for NL80211Attribute {
@@ -57,7 +75,16 @@ impl Nla for NL80211Attribute {
                 InterfaceType => (enum NL80211InterfaceType(u32)),
                 SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-                MacAddress => [u8; 6]
+                MacAddress => [u8; 6],
+
+                RegAlpha2 => String,
+                RegRules => [NL80211RegulatoryRule],
+                DFSRegion => u8,
+
+                WiphyFreq => u32,
+                ChannelWidth => (enum NL80211ChannelWidth(u32)),
+                CenterFreq1 => u32,
+                CenterFreq2 => u32
             ),
         }
     }
@@ -76,7 +103,14 @@ impl Nla for NL80211Attribute {
                 InterfaceName(_),
                 InterfaceType(_),
                 SupportedInterfaceTypes(_),
-                MacAddress(_)
+                MacAddress(_),
+                RegAlpha2(_),
+                RegRules(_),
+                DFSRegion(_),
+                WiphyFreq(_),
+                ChannelWidth(_),
+                CenterFreq1(_),
+                CenterFreq2(_)
             ) as u16,
         }
     }
@@ -95,7 +129,16 @@ impl Nla for NL80211Attribute {
                 InterfaceType => (enum NL80211InterfaceType(u32)),
                 SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-                MacAddress => [u8; 6]
+                MacAddress => [u8; 6],
+
+                RegAlpha2 => String,
+                RegRules => [NL80211RegulatoryRule],
+                DFSRegion => u8,
+
+                WiphyFreq => u32,
+                ChannelWidth => (enum NL80211ChannelWidth(u32)),
+                CenterFreq1 => u32,
+                CenterFreq2 => u32
             ),
         }
     }
@@ -118,7 +161,16 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for NL80211Attribu
             InterfaceType => (enum NL80211InterfaceType((u32 as u16))),
             SupportedInterfaceTypes => [(enum NL80211InterfaceType(<kind>))],
 
-            MacAddress => [u8; 6]
+            MacAddress => [u8; 6],
+
+            RegAlpha2 => String,
+            RegRules => [(nla NL80211RegulatoryRule)],
+            DFSRegion => u8,
+
+            WiphyFreq => u32,
+            ChannelWidth => (enum NL80211ChannelWidth(u32)),
+            CenterFreq1 => u32,
+            CenterFreq2 => u32
         ))
     }
 }

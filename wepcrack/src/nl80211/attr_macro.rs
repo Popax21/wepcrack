@@ -3,6 +3,9 @@ macro_rules! val_size {
     ((), $val:expr) => {
         0
     };
+    (u8, $val:expr) => {
+        std::mem::size_of::<u8>()
+    };
     (u16, $val:expr) => {
         std::mem::size_of::<u16>()
     };
@@ -22,6 +25,11 @@ macro_rules! val_size {
         netlink_packet_utils::nla::NLA_HEADER_SIZE * $val.len()
     };
 
+    ([$nla_type:tt], $val:expr) => {{
+        use netlink_packet_utils::Emitable;
+        $val.as_slice().buffer_len()
+    }};
+
     ([u8; $num:literal], $val:expr) => {
         $num
     };
@@ -32,6 +40,9 @@ macro_rules! emit_val {
     //primitives
     ((), $val:expr, $buf:expr) => {{}};
 
+    (u8, $val:expr, $buf:expr) => {{
+        $buf[0] = *$val;
+    }};
     (u16, $val:expr, $buf:expr) => {{
         use netlink_packet_utils::byteorder::ByteOrder;
         netlink_packet_utils::byteorder::NativeEndian::write_u16($buf, *$val)
@@ -49,16 +60,27 @@ macro_rules! emit_val {
     }};
 
     //composite
+    (($cast:tt as Into<$type:tt>), $val:expr, $buf:expr) => {
+        $crate::nl80211::attr_macro::emit_val!($type, &Into::<$type>::into(*$val), $buf)
+    };
+    (($type:tt as $cast:tt), $val:expr, $buf:expr) => {
+        $crate::nl80211::attr_macro::emit_val!($cast, &(*$val as $cast), $buf)
+    };
+
     ((enum $enum:ident($type:tt)), $val:expr, $buf:expr) => {
         $crate::nl80211::attr_macro::emit_val!($type, &(*$val as $type), $buf)
     };
-
     ([(enum $enum:ident(<kind>))], $val:expr, $buf:expr) => {{
         for (i, v) in $val.iter().enumerate() {
             let mut nlabuf = netlink_packet_utils::nla::NlaBuffer::<&mut [u8]>::new(&mut $buf[i..]);
             nlabuf.set_kind(*v as u16);
             nlabuf.set_length(0);
         }
+    }};
+
+    ([$nla_type:tt], $val:expr, $buf:expr) => {{
+        use netlink_packet_utils::Emitable;
+        $val.as_slice().emit($buf)
     }};
 
     ([u8; $num:literal], $val:expr, $buf:expr) => {
@@ -69,6 +91,10 @@ pub(super) use emit_val;
 
 macro_rules! parse_val {
     //primitives
+    (u8, $buf:expr) => {{
+        $crate::nl80211::attr_macro::check_nla_payload_size!($buf, 1);
+        $buf.value()[0]
+    }};
     (u16, $buf:expr) => {
         netlink_packet_utils::parsers::parse_u16($buf.value())?
     };
@@ -79,10 +105,18 @@ macro_rules! parse_val {
         netlink_packet_utils::parsers::parse_string($buf.value())?
     };
 
+    ((nla $nla_type:tt), $buf:expr) => {
+        $nla_type::parse(&$buf)?
+    };
+
     //composite
+    (($cast:tt as From<$type:tt>), $buf:expr) => {
+        $cast::from($crate::nl80211::attr_macro::parse_val!($type, $buf))
+    };
     (($type:tt as $cast:tt), $buf:expr) => {
         $crate::nl80211::attr_macro::parse_val!($type, $buf) as $cast
     };
+
     ((enum $enum:ident($type:tt)), $buf:expr) => {{
         let val = $crate::nl80211::attr_macro::parse_val!($type, $buf);
         $enum::try_from(val)
@@ -115,8 +149,8 @@ macro_rules! check_nla_payload_size {
         if $buf.value_length() != $len {
             return Err(DecodeError::from(format!(
                 "unexpected nl80211 attribute payload length: expected {}, got {}",
-                $buf.value_length(),
-                $len
+                $len,
+                $buf.value_length()
             )));
         }
     };

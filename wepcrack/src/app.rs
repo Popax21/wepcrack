@@ -1,4 +1,5 @@
 use crate::ieee80211::IEEE80211Monitor;
+use crate::nl80211::NL80211RegulatoryDomain;
 use crate::ui::UIScene;
 use crate::TERMINAL_LOCK;
 use crate::{nl80211::NL80211Connection, ui};

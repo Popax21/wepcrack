@@ -26,6 +26,9 @@ pub enum NL80211Command {
     SetInterface,
     NewInterface,
     DelInterface,
+
+    GetReg = 31,
+    SetReg = 26,
 }
 
 #[derive(Clone, Debug)]
