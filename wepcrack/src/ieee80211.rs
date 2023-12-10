@@ -161,19 +161,31 @@ impl Drop for IEEE80211Monitor {
 
 #[derive(Debug, Clone)]
 pub struct IEEE80211Packet {
-    pub radiotap: Radiotap,
+    radiotap: Radiotap,
+    data: Vec<u8>,
 }
 
 impl TryFrom<&[u8]> for IEEE80211Packet {
     type Error = anyhow::Error;
 
     fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
-        let (radiotap, _buffer) = Radiotap::parse(buffer)?;
+        let (radiotap, data) = Radiotap::parse(buffer)?;
 
-        Ok(IEEE80211Packet { radiotap })
+        Ok(IEEE80211Packet {
+            radiotap,
+            data: Vec::from(data),
+        })
     }
 }
 
 impl IEEE80211Packet {
     pub const MAX_SIZE: usize = 16384;
+
+    pub const fn radiotap(&self) -> &Radiotap {
+        &self.radiotap
+    }
+
+    pub fn ieee80211_frame(&self) -> ieee80211::Frame {
+        ieee80211::Frame::new(&self.data)
+    }
 }

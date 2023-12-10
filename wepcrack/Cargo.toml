@@ -10,6 +10,7 @@ anyhow = "1.0.75"
 crossterm = "0.27.0"
 ctrlc = "3.4.1"
 hex = "0.4.3"
+ieee80211 = { git = "https://github.com/SpiralP/rust-ieee80211" } 
 libc = "0.2.150"
 netlink-packet-core = { version = "0.7.0", default-features = false }
 netlink-packet-generic = "0.3.3"
