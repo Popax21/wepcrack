@@ -12,7 +12,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::{
     cell::RefCell,
     error::Error,
@@ -21,6 +21,8 @@ use std::{
 };
 
 struct AppState {
+    state_ref: Weak<RefCell<AppState>>,
+
     new_scene: Option<Box<dyn UIScene>>,
 
     nl80211_con: Option<NL80211Connection>,
@@ -28,21 +30,56 @@ struct AppState {
 }
 
 impl AppState {
-    fn select_device(state: &Rc<RefCell<AppState>>) {
-        let state_rc = state.clone();
-        let mut state = state.borrow_mut();
+    fn new() -> Rc<RefCell<AppState>> {
+        let state = Rc::new(RefCell::new(AppState {
+            state_ref: Weak::default(),
+            new_scene: None,
+            nl80211_con: None,
+            ieee80211_mon: None,
+        }));
 
-        state.new_scene = Some(Box::new(ui::dev_select::UIDevSetup::new(
-            state.nl80211_con.as_ref().unwrap(),
+        state.borrow_mut().state_ref = Rc::downgrade(&state);
+
+        state
+    }
+
+    fn select_device(&mut self) {
+        //Switch the scene to the device selection scene
+        let state_ref = self.state_ref.clone();
+        self.new_scene = Some(Box::new(ui::dev_select::UIDeviceSelect::new(
+            self.nl80211_con.as_ref().unwrap(),
             Box::new(move |wiphy| {
+                //Deref the state reference
+                let Some(state) = state_ref.upgrade() else {
+                    return;
+                };
+                let mut state = state.borrow_mut();
+
                 //Create the IEEE 802.11 monitor
-                let mut state = state_rc.borrow_mut();
                 state.ieee80211_mon = Some(
                     IEEE80211Monitor::enter_monitor_mode(state.nl80211_con.take().unwrap(), wiphy)
                         .expect("failed to create IEEE 802.11 monitor"),
                 );
+                println!(
+                    "packet: {:?}",
+                    state
+                        .ieee80211_mon
+                        .as_mut()
+                        .unwrap()
+                        .sniff_packet()
+                        .expect("a")
+                );
+
+                //Switch the scene to the target selector
+                state.select_target();
             }),
         )));
+    }
+
+    fn select_target(&mut self) {
+        //Switch the scene to the device selection scene
+        let state_ref = self.state_ref.clone();
+        self.new_scene = Some(Box::new(ui::target_select::UITargetSelect::new()));
     }
 }
 
@@ -58,18 +95,20 @@ impl App {
             NL80211Connection::new().context("failed to create a nl80211 connection")?;
 
         //Allocate the app state
-        let state = Rc::new(RefCell::new(AppState {
-            new_scene: None,
+        let state_rc = AppState::new();
 
-            nl80211_con: Some(nl80211_con),
-            ieee80211_mon: None,
-        }));
+        //Set up the initial app state
+        {
+            let mut state = state_rc.borrow_mut();
+            state.nl80211_con = Some(nl80211_con);
+            state.select_device();
+        }
 
-        //Set up the initial device selector scene
-        AppState::select_device(&state);
-
-        let scene = state.borrow_mut().new_scene.take().unwrap();
-        Ok(App { scene, state })
+        let scene = state_rc.borrow_mut().new_scene.take().unwrap();
+        Ok(App {
+            scene: scene,
+            state: state_rc,
+        })
     }
 
     fn switch_scenes(&mut self) {

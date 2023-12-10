@@ -45,6 +45,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
 
 [[package]]
+name = "bitops"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f41a723cb1fba322fe1bc95dd28dc7e7aadd8d3f81db31511df86c64c2d4a57e"
+dependencies = [
+ "num-integer",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -246,6 +255,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-packet-route"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd9ccdfabb457e05c7c61e66eb39262a204fbb376c53968b5e52dce15b423fc5"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "libc",
+ "log",
+ "netlink-packet-core",
+ "netlink-packet-utils",
+]
+
+[[package]]
 name = "netlink-packet-utils"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -277,6 +300,25 @@ dependencies = [
  "bitflags 2.4.1",
  "cfg-if",
  "libc",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+dependencies = [
+ "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]
@@ -361,12 +403,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
 name = "quote"
 version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "radiotap"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e50757032799a2a41ed705169a87efea63fb0babfe69f418b3f5630df4c8394a"
+dependencies = [
+ "bitops",
+ "byteorder",
+ "quick-error",
 ]
 
 [[package]]
@@ -473,6 +532,16 @@ name = "smallvec"
 version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
+
+[[package]]
+name = "socket2"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
 
 [[package]]
 name = "strum"
@@ -582,13 +651,17 @@ dependencies = [
  "crossterm",
  "ctrlc",
  "hex",
+ "libc",
  "netlink-packet-core",
  "netlink-packet-generic",
+ "netlink-packet-route",
  "netlink-packet-utils",
  "netlink-sys",
  "num_enum",
+ "radiotap",
  "rand",
  "ratatui",
+ "socket2",
 ]
 
 [[package]]

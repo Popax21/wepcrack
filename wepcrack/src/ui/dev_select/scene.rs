@@ -8,24 +8,24 @@ use crate::{
 
 use super::{DeviceList, DeviceListWidget};
 
-pub struct UIDevSetup {
+pub struct UIDeviceSelect {
     dev_list: DeviceList,
     dev_list_widget: DeviceListWidget,
     confirmation: Option<ConfirmationWidget<'static, DeviceList>>,
     callback: Option<Box<dyn FnOnce(NL80211Wiphy)>>,
 }
 
-impl UIDevSetup {
+impl UIDeviceSelect {
     #[allow(clippy::new_without_default)]
     pub fn new(
         nl80211_con: &NL80211Connection,
         callback: Box<dyn FnOnce(NL80211Wiphy)>,
-    ) -> UIDevSetup {
+    ) -> UIDeviceSelect {
         //Query the device list
         let dev_list =
             DeviceList::query_list(nl80211_con).expect("failed to query the device list");
 
-        UIDevSetup {
+        UIDeviceSelect {
             dev_list_widget: DeviceListWidget::new(&dev_list),
             dev_list,
             confirmation: None,
@@ -34,7 +34,7 @@ impl UIDevSetup {
     }
 }
 
-impl UIScene for UIDevSetup {
+impl UIScene for UIDeviceSelect {
     fn should_quit(&self) -> bool {
         false
     }

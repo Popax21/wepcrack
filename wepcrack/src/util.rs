@@ -3,6 +3,26 @@ use std::sync::{
     LockResult, Mutex, MutexGuard,
 };
 
+pub struct DropGuard<T: FnOnce()>(Option<T>);
+
+impl<T: FnOnce()> DropGuard<T> {
+    pub fn new(cb: T) -> DropGuard<T> {
+        DropGuard(Some(cb))
+    }
+
+    pub fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl<T: FnOnce()> Drop for DropGuard<T> {
+    fn drop(&mut self) {
+        if let Some(cb) = self.0.take() {
+            cb();
+        }
+    }
+}
+
 pub struct RecessiveMutex<T> {
     wants_access: AtomicBool,
     mutex: Mutex<T>,
