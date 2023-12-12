@@ -32,6 +32,8 @@ pub enum NL80211AttributeTag {
     ChannelWidth = 159,
     CenterFreq1 = 160,
     CenterFreq2 = 161,
+
+    SocketOwner = 204,
 }
 
 #[allow(unused)]
@@ -58,6 +60,8 @@ pub enum NL80211Attribute {
     ChannelWidth(NL80211ChannelWidth),
     CenterFreq1(u32),
     CenterFreq2(u32),
+
+    SocketOwner,
 }
 
 impl Nla for NL80211Attribute {
@@ -84,7 +88,9 @@ impl Nla for NL80211Attribute {
                 WiphyFreq => u32,
                 ChannelWidth => (enum NL80211ChannelWidth(u32)),
                 CenterFreq1 => u32,
-                CenterFreq2 => u32
+                CenterFreq2 => u32,
+
+                SocketOwner => ()
             ),
         }
     }
@@ -110,7 +116,8 @@ impl Nla for NL80211Attribute {
                 WiphyFreq(_),
                 ChannelWidth(_),
                 CenterFreq1(_),
-                CenterFreq2(_)
+                CenterFreq2(_),
+                SocketOwner
             ) as u16,
         }
     }
@@ -138,7 +145,9 @@ impl Nla for NL80211Attribute {
                 WiphyFreq => u32,
                 ChannelWidth => (enum NL80211ChannelWidth(u32)),
                 CenterFreq1 => u32,
-                CenterFreq2 => u32
+                CenterFreq2 => u32,
+
+                SocketOwner => ()
             ),
         }
     }
@@ -170,7 +179,9 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for NL80211Attribu
             WiphyFreq => u32,
             ChannelWidth => (enum NL80211ChannelWidth(u32)),
             CenterFreq1 => u32,
-            CenterFreq2 => u32
+            CenterFreq2 => u32,
+
+            SocketOwner => ()
         ))
     }
 }

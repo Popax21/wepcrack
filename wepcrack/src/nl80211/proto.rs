@@ -29,6 +29,8 @@ pub enum NL80211Command {
 
     GetReg = 31,
     SetReg = 26,
+
+    SetChannel = 65,
 }
 
 #[derive(Clone, Debug)]
@@ -45,6 +47,10 @@ impl NL80211Message {
                 self.cmd
             );
         }
+    }
+
+    pub fn has_attribute(&self, attr_tag: NL80211AttributeTag) -> bool {
+        self.nlas.iter().any(|attr| attr.kind() == attr_tag as u16)
     }
 
     pub fn steal_attribute(&mut self, attr_tag: NL80211AttributeTag) -> Option<NL80211Attribute> {

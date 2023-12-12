@@ -25,11 +25,11 @@ pub struct IEEE80211Monitor {
 
 impl IEEE80211Monitor {
     pub fn enter_monitor_mode(
-        nl802111_con: NL80211Connection,
+        nl80211_con: NL80211Connection,
         wiphy: NL80211Wiphy,
     ) -> anyhow::Result<IEEE80211Monitor> {
         //Obtain a list of all interfaces
-        let orig_interfaces = NL80211Interface::query_list(&nl802111_con)
+        let orig_interfaces = NL80211Interface::query_list(&nl80211_con)
             .context("failed to query list of nl80211 interfaces")?
             .into_iter()
             .filter(|interf| interf.wiphy() == wiphy.index())
@@ -37,31 +37,33 @@ impl IEEE80211Monitor {
 
         //Create a monitor interface
         let mon_interface = NL80211Interface::create_new(
-            &nl802111_con,
+            &nl80211_con,
             &wiphy,
             &(wiphy.name().to_owned() + "mon"),
             NL80211InterfaceType::Monitor,
+            true,
         )
         .context("failed to create nl80211 monitor interface")?;
 
         let mut mon_guard = DropGuard::new(|| {
-            _ = mon_interface.delete(&nl802111_con);
+            _ = mon_interface.delete(&nl80211_con);
         });
 
         //Delete the original interfaces
         for iface in &orig_interfaces {
             iface
-                .delete(&nl802111_con)
+                .delete(&nl80211_con)
                 .with_context(|| format!("failed to delete old nl80211 interface: {iface:?}"))?;
         }
 
         let mut orig_iface_guard = DropGuard::new(|| {
             for orig_if in &orig_interfaces {
                 _ = NL80211Interface::create_new(
-                    &nl802111_con,
+                    &nl80211_con,
                     &wiphy,
                     orig_if.name(),
                     orig_if.interface_type(),
+                    false,
                 );
             }
         });
@@ -110,7 +112,7 @@ impl IEEE80211Monitor {
         drop(orig_iface_guard);
 
         Ok(IEEE80211Monitor {
-            nl802111_con,
+            nl802111_con: nl80211_con,
             wiphy,
             orig_interfaces,
             mon_interface,
@@ -149,6 +151,7 @@ impl Drop for IEEE80211Monitor {
                     &self.wiphy,
                     orig_if.name(),
                     orig_if.interface_type(),
+                    false,
                 )?;
             }
 

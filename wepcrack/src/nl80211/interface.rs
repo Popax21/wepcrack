@@ -3,8 +3,8 @@ use num_enum::TryFromPrimitive;
 use crate::steal_msg_attr;
 
 use super::{
-    NL80211Attribute, NL80211AttributeTag, NL80211Command, NL80211Connection, NL80211Message,
-    NL80211Wiphy, NL80211WiphyIndex,
+    NL80211Attribute, NL80211AttributeTag, NL80211Channel, NL80211Command, NL80211Connection,
+    NL80211Message, NL80211Wiphy, NL80211WiphyIndex,
 };
 
 #[repr(u16)]
@@ -90,14 +90,20 @@ impl NL80211Interface {
         wiphy: &NL80211Wiphy,
         name: &str,
         interface_type: NL80211InterfaceType,
+        con_owned: bool,
     ) -> anyhow::Result<NL80211Interface> {
+        let mut nlas = vec![
+            NL80211Attribute::WiphyIndex(wiphy.index()),
+            NL80211Attribute::InterfaceName(name.to_owned()),
+            NL80211Attribute::InterfaceType(interface_type),
+        ];
+        if con_owned {
+            nlas.push(NL80211Attribute::SocketOwner)
+        }
+
         Ok(Self::from_message(con.send_get_request(NL80211Message {
             cmd: NL80211Command::NewInterface,
-            nlas: vec![
-                NL80211Attribute::WiphyIndex(wiphy.index()),
-                NL80211Attribute::InterfaceName(name.to_owned()),
-                NL80211Attribute::InterfaceType(interface_type),
-            ],
+            nlas: nlas,
         })?)
         .unwrap())
     }
@@ -132,5 +138,71 @@ impl NL80211Interface {
         })?;
 
         Ok(())
+    }
+
+    pub fn get_channel(&self, con: &NL80211Connection) -> anyhow::Result<Option<NL80211Channel>> {
+        let mut resp = con.send_get_request(NL80211Message {
+            cmd: NL80211Command::GetInterface,
+            nlas: vec![NL80211Attribute::InterfaceIndex(self.index)],
+        })?;
+
+        resp.verify_cmd(NL80211Command::NewInterface);
+
+        if !resp.has_attribute(NL80211AttributeTag::WiphyFreq) {
+            return Ok(None);
+        }
+
+        steal_msg_attr!(WiphyFreq(freq) = resp);
+        steal_msg_attr!(ChannelWidth(width) = resp);
+
+        let center_freq1 = resp
+            .steal_attribute(NL80211AttributeTag::CenterFreq1)
+            .map(|attr| {
+                if let NL80211Attribute::CenterFreq1(freq) = attr {
+                    freq
+                } else {
+                    unreachable!()
+                }
+            });
+
+        let center_freq2 = resp
+            .steal_attribute(NL80211AttributeTag::CenterFreq2)
+            .map(|attr| {
+                if let NL80211Attribute::CenterFreq2(freq) = attr {
+                    freq
+                } else {
+                    unreachable!()
+                }
+            });
+
+        NL80211Channel::new(freq, width, center_freq1, center_freq2)
+            .ok_or(anyhow::anyhow!(
+                "invalid or unsupported current interface channel"
+            ))
+            .map(|channel| Some(channel))
+    }
+
+    pub fn set_channel(
+        &self,
+        channel: &NL80211Channel,
+        con: &NL80211Connection,
+    ) -> anyhow::Result<()> {
+        let mut nlas = vec![
+            NL80211Attribute::InterfaceIndex(self.index),
+            NL80211Attribute::WiphyFreq(channel.frequency()),
+            NL80211Attribute::ChannelWidth(channel.width()),
+        ];
+
+        if let Some(center_freq1) = channel.center_freq1() {
+            nlas.push(NL80211Attribute::CenterFreq1(center_freq1));
+        }
+        if let Some(center_freq2) = channel.center_freq1() {
+            nlas.push(NL80211Attribute::CenterFreq2(center_freq2));
+        }
+
+        con.send_acked_request(NL80211Message {
+            cmd: NL80211Command::SetChannel,
+            nlas: nlas,
+        })
     }
 }
