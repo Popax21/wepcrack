@@ -173,7 +173,11 @@ impl App {
             Paragraph::new(vec![
                 Line::from("WEPCrack".magenta().bold()),
                 Line::from("WEP Key Cracking Demonstration Tool".blue()),
-                Line::from("© Popax21, 2023".blue().italic()),
+                Line::from(
+                    "© Popax21, Marcel Gabriel Janzer 2023"
+                        .blue()
+                        .italic(),
+                ),
             ])
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::BOTTOM)),

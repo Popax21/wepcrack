@@ -63,11 +63,11 @@ impl NL80211Channel {
             iter,
             (32..=177).map(|channel| Self::ht20_channel(channel).unwrap()),
             (32..=(177 - 4)).map(|channel| Self::ht40_channel(channel, channel + 4).unwrap()), //HT40+
-            ((32 + 4)..=177).map(|channel| Self::ht40_channel(channel, channel + 4).unwrap()), //Ht40-
+            ((32 + 4)..=177).map(|channel| Self::ht40_channel(channel, channel + 4).unwrap()), //HT40-
             (32..=(177 - 8)).map(|channel| Self::vht80_channel(channel, channel + 8).unwrap()), //VHT80+
-            ((32 + 8)..=177).map(|channel| Self::vht80_channel(channel, channel + 8).unwrap()), //VHt80-
+            ((32 + 8)..=177).map(|channel| Self::vht80_channel(channel, channel + 8).unwrap()), //VHT80-
             (32..=(177 - 16)).map(|channel| Self::vht160_channel(channel, channel + 16).unwrap()), //VHT160+
-            ((32 + 16)..=177).map(|channel| Self::vht160_channel(channel, channel + 16).unwrap()) //VHt160-
+            ((32 + 16)..=177).map(|channel| Self::vht160_channel(channel, channel + 16).unwrap()) //VHT160-
         );
 
         Box::new(iter)
@@ -192,13 +192,10 @@ impl NL80211Channel {
     //But we only really care about those in the 2.4GHz and 5.0GHhz bands
     pub fn channel_idx_to_band(idx: u32) -> Option<NL80211ChannelBand> {
         match idx {
-            //Channels 1-13: 2.412GHz 5MHz spacing
-            1..=13 => Some(NL80211ChannelBand::Band2400Mhz),
+            //Channels 1-14: 2.4GHz
+            1..=14 => Some(NL80211ChannelBand::Band2400Mhz),
 
-            //Channels 1-14
-            14 => Some(NL80211ChannelBand::Band2400Mhz),
-
-            //Channel 32-177: 5.160Ghz 5MHz spacing
+            //Channel 32-177: 5.160Ghz
             32..=177 => Some(NL80211ChannelBand::Band5Ghz),
 
             _ => None,
