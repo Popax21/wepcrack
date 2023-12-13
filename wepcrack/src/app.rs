@@ -1,5 +1,4 @@
 use crate::ieee80211::IEEE80211Monitor;
-use crate::nl80211::NL80211RegulatoryDomain;
 use crate::ui::UIScene;
 use crate::TERMINAL_LOCK;
 use crate::{nl80211::NL80211Connection, ui};
@@ -62,13 +61,8 @@ impl AppState {
                         .expect("failed to create IEEE 802.11 monitor"),
                 );
                 println!(
-                    "packet: {:?}",
-                    state
-                        .ieee80211_mon
-                        .as_mut()
-                        .unwrap()
-                        .sniff_packet()
-                        .expect("a")
+                    "channels: {:?}",
+                    state.ieee80211_mon.as_ref().unwrap().channels()
                 );
 
                 //Switch the scene to the target selector
@@ -107,7 +101,7 @@ impl App {
 
         let scene = state_rc.borrow_mut().new_scene.take().unwrap();
         Ok(App {
-            scene: scene,
+            scene,
             state: state_rc,
         })
     }

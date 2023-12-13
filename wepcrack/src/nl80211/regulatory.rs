@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use netlink_packet_utils::{
     nla::{DefaultNla, Nla, NlaBuffer, NlasIterator},
     DecodeError, Emitable, Parseable,
@@ -11,7 +13,7 @@ use crate::{
 
 use super::{
     attr_macro::{attr_size, attr_tag, emit_attr, parse_attr},
-    NL80211Connection, NL80211Message, NL80211Wiphy,
+    NL80211Channel, NL80211Connection, NL80211Message, NL80211Wiphy,
 };
 
 #[derive(Debug, Clone)]
@@ -78,6 +80,74 @@ impl NL80211RegulatoryDomain {
 
     pub fn rules(&self) -> &[NL80211RegulatoryRule] {
         &self.rules
+    }
+
+    pub fn get_permitted_channels<'a>(&'a self) -> Box<dyn Iterator<Item = NL80211Channel> + 'a> {
+        Box::new(NL80211Channel::all_channels().filter(|channel| {
+            //Check which regulatory rules apply
+            let channel_range = channel.freq_range();
+            let mut autobw: Option<bool> = None;
+            for rule in &self.rules {
+                let rule_range = rule.freq_range_mhz();
+                if rule_range.start >= channel_range.end || channel_range.start >= rule_range.end {
+                    continue;
+                }
+
+                //Check if this rule blocks the channel
+                if rule.flags.contains(
+                    NL80211RegulatoryRuleFlags::NoOFDM
+                        | NL80211RegulatoryRuleFlags::NoCCK
+                        | NL80211RegulatoryRuleFlags::NoIndoor
+                        | NL80211RegulatoryRuleFlags::NoOutdoor
+                        | NL80211RegulatoryRuleFlags::PTPOnly
+                        | NL80211RegulatoryRuleFlags::PTMPOnly,
+                ) {
+                    return false;
+                }
+
+                if rule.flags.contains(match channel {
+                    NL80211Channel::ChannelHT40 {
+                        main_channel,
+                        aux_channel,
+                    } => {
+                        if aux_channel < main_channel {
+                            NL80211RegulatoryRuleFlags::NoHT40Minus
+                        } else {
+                            NL80211RegulatoryRuleFlags::NoHT40Plus
+                        }
+                    }
+                    NL80211Channel::ChannelVHT80 {
+                        main_channel: _,
+                        aux_channel: _,
+                    } => NL80211RegulatoryRuleFlags::No80MHZ,
+                    NL80211Channel::ChannelVHT160 {
+                        main_channel: _,
+                        aux_channel: _,
+                    } => NL80211RegulatoryRuleFlags::No160MHZ,
+                    _ => 0.into(),
+                }) {
+                    return false;
+                }
+
+                //If multiple rules cover this channel then check that all of them have the auto-bandwidth flag set
+                if let Some(autobw) = autobw {
+                    if !autobw
+                        || !rule
+                            .flags
+                            .contains(NL80211RegulatoryRuleFlags::AutoBandwidth)
+                    {
+                        return false;
+                    }
+                } else {
+                    autobw = Some(
+                        rule.flags
+                            .contains(NL80211RegulatoryRuleFlags::AutoBandwidth),
+                    );
+                }
+            }
+
+            true
+        }))
     }
 }
 
@@ -230,6 +300,13 @@ impl NL80211RegulatoryRule {
         }
 
         (attr_buf, attr_idx)
+    }
+
+    pub fn freq_range_mhz(&self) -> Range<u32> {
+        Range {
+            start: self.start_freq_khz / 1000,
+            end: self.end_freq_khz.div_ceil(1000),
+        }
     }
 }
 

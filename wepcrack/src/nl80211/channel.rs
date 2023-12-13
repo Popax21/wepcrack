@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::Rem};
+use std::{
+    fmt::Display,
+    ops::{Range, Rem},
+};
 
 use num_enum::TryFromPrimitive;
 
@@ -63,11 +66,11 @@ impl NL80211Channel {
             iter,
             (32..=177).map(|channel| Self::ht20_channel(channel).unwrap()),
             (32..=(177 - 4)).map(|channel| Self::ht40_channel(channel, channel + 4).unwrap()), //HT40+
-            ((32 + 4)..=177).map(|channel| Self::ht40_channel(channel, channel + 4).unwrap()), //HT40-
+            ((32 + 4)..=177).map(|channel| Self::ht40_channel(channel, channel - 4).unwrap()), //HT40-
             (32..=(177 - 8)).map(|channel| Self::vht80_channel(channel, channel + 8).unwrap()), //VHT80+
-            ((32 + 8)..=177).map(|channel| Self::vht80_channel(channel, channel + 8).unwrap()), //VHT80-
+            ((32 + 8)..=177).map(|channel| Self::vht80_channel(channel, channel - 8).unwrap()), //VHT80-
             (32..=(177 - 16)).map(|channel| Self::vht160_channel(channel, channel + 16).unwrap()), //VHT160+
-            ((32 + 16)..=177).map(|channel| Self::vht160_channel(channel, channel + 16).unwrap()) //VHT160-
+            ((32 + 16)..=177).map(|channel| Self::vht160_channel(channel, channel - 16).unwrap()) //VHT160-
         );
 
         Box::new(iter)
@@ -300,6 +303,15 @@ impl NL80211Channel {
                 main_channel: _,
                 aux_channel: _,
             } => NL80211ChannelWidth::Mhz160,
+        }
+    }
+
+    pub fn freq_range(&self) -> Range<u32> {
+        let center_freq = self.frequency();
+        let bandwidth = self.width().bandwidth();
+        Range {
+            start: center_freq - bandwidth / 2,
+            end: center_freq + bandwidth / 2 + 1,
         }
     }
 

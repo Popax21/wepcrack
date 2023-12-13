@@ -65,13 +65,13 @@ impl NL80211Interface {
         con: &NL80211Connection,
         idx: NL80211WiphyIndex,
     ) -> anyhow::Result<NL80211Interface> {
-        Ok(Self::from_message(con.send_get_request(NL80211Message {
+        Self::from_message(con.send_get_request(NL80211Message {
             cmd: NL80211Command::GetInterface,
             nlas: vec![NL80211Attribute::InterfaceIndex(idx)],
         })?)
         .ok_or(anyhow::anyhow!(
             "nl80211 interface with index {idx} is not a valid interface"
-        ))?)
+        ))
     }
 
     pub fn query_list(con: &NL80211Connection) -> anyhow::Result<Vec<NL80211Interface>> {
@@ -103,7 +103,7 @@ impl NL80211Interface {
 
         Ok(Self::from_message(con.send_get_request(NL80211Message {
             cmd: NL80211Command::NewInterface,
-            nlas: nlas,
+            nlas,
         })?)
         .unwrap())
     }
@@ -179,7 +179,7 @@ impl NL80211Interface {
             .ok_or(anyhow::anyhow!(
                 "invalid or unsupported current interface channel"
             ))
-            .map(|channel| Some(channel))
+            .map(Some)
     }
 
     pub fn set_channel(
@@ -202,7 +202,7 @@ impl NL80211Interface {
 
         con.send_acked_request(NL80211Message {
             cmd: NL80211Command::SetChannel,
-            nlas: nlas,
+            nlas,
         })
     }
 }

@@ -10,16 +10,23 @@ use radiotap::Radiotap;
 use socket2::{Domain, SockAddr, Socket, Type};
 
 use crate::{
-    nl80211::{NL80211Connection, NL80211Interface, NL80211InterfaceType, NL80211Wiphy},
+    nl80211::{
+        NL80211Channel, NL80211Connection, NL80211Interface, NL80211InterfaceType,
+        NL80211RegulatoryDomain, NL80211Wiphy,
+    },
     rtnetlink::RTNetlinkConnection,
     util::DropGuard,
 };
 
 pub struct IEEE80211Monitor {
     nl802111_con: NL80211Connection,
+
     wiphy: NL80211Wiphy,
+    channels: Vec<NL80211Channel>,
+
     orig_interfaces: Vec<NL80211Interface>,
     mon_interface: NL80211Interface,
+
     packet_socket: Socket,
 }
 
@@ -82,6 +89,12 @@ impl IEEE80211Monitor {
             }))
             .context("failed to put monitor interface into up state")?;
 
+        //Obtain a list of all permitted channels
+        let channels = NL80211RegulatoryDomain::query_for_wiphy(&nl80211_con, &wiphy)
+            .context("failed to query nl80211 wiphy regulatory domain")?
+            .get_permitted_channels()
+            .collect();
+
         //Create and bind the packet capture socket
         let packet_socket = Socket::new(Domain::from(AF_PACKET), Type::from(SOCK_RAW), None)
             .context("failed to create AF_PACKET socket")?;
@@ -113,15 +126,23 @@ impl IEEE80211Monitor {
 
         Ok(IEEE80211Monitor {
             nl802111_con: nl80211_con,
+
             wiphy,
+            channels,
+
             orig_interfaces,
             mon_interface,
+
             packet_socket,
         })
     }
 
     pub const fn wiphy(&self) -> &NL80211Wiphy {
         &self.wiphy
+    }
+
+    pub fn channels(&self) -> &[NL80211Channel] {
+        &self.channels
     }
 
     pub fn sniff_packet(&mut self) -> Result<IEEE80211Packet, Box<anyhow::Error>> {
