@@ -64,7 +64,7 @@ impl UIChannelSelect {
                     ]))
                     .bold()
                 } else {
-                    ListItem::new(channel.to_string()).into()
+                    ListItem::new(format!("  {channel}  ")).into()
                 }
             })
             .collect::<Vec<_>>();
@@ -141,8 +141,8 @@ impl UIChannelSelect {
             &format!(
                 "{:5.3}Ghz ({:5.3}-{:5.3}GHz)",
                 channel.frequency() as f64 / 1000.,
-                freq_range.start as f64 / 1000.,
-                (freq_range.end - 1) as f64 / 1000.
+                *freq_range.start() as f64 / 1000.,
+                *freq_range.end() as f64 / 1000.
             ),
         );
 
@@ -241,7 +241,7 @@ impl UIWidget<'_> for UIChannelSelect {
     fn draw(&mut self, target_mon: &TargetMonitor, frame: &mut Frame, area: Rect) {
         let layout: std::rc::Rc<[Rect]> = Layout::new()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+            .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
             .split(area);
 
         self.draw_channel_select(target_mon, frame, layout[0]);

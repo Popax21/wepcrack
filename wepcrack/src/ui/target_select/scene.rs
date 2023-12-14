@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crossterm::event::{Event, KeyCode, KeyEventKind};
-use ratatui::{prelude::Rect, style::Stylize, text::Line, Frame};
+use ratatui::{prelude::Rect, text::Line, Frame};
 
 use crate::{
     ieee80211::IEEE80211Monitor,
@@ -96,14 +96,9 @@ impl UIScene for UITargetSelect {
                     //Ask for confirmation upon pressing enter
                     if let Event::Key(key) = event {
                         if key.kind == KeyEventKind::Press && key.code == KeyCode::Enter {
-                            let channel = channel_sel_widget.selected_channel(&self.monitor);
-
-                            *confirmation_widget_opt =
-                                Some(ConfirmationWidget::new(Line::from(vec![
-                                    "Do you want to switch to WiFi channel ".into(),
-                                    channel.to_string().bold(),
-                                    "?".into(),
-                                ])));
+                            *confirmation_widget_opt = Some(ConfirmationWidget::new(Line::from(
+                                "Do you want to switch to the selected WiFi channel?",
+                            )));
                             return;
                         }
                     }

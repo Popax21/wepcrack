@@ -187,22 +187,14 @@ impl NL80211Interface {
         channel: &NL80211Channel,
         con: &NL80211Connection,
     ) -> anyhow::Result<()> {
-        let mut nlas = vec![
-            NL80211Attribute::InterfaceIndex(self.index),
-            NL80211Attribute::WiphyFreq(channel.frequency()),
-            NL80211Attribute::ChannelWidth(channel.width()),
-        ];
-
-        if let Some(center_freq1) = channel.center_freq1() {
-            nlas.push(NL80211Attribute::CenterFreq1(center_freq1));
-        }
-        if let Some(center_freq2) = channel.center_freq1() {
-            nlas.push(NL80211Attribute::CenterFreq2(center_freq2));
-        }
-
         con.send_acked_request(NL80211Message {
             cmd: NL80211Command::SetChannel,
-            nlas,
+            nlas: vec![
+                NL80211Attribute::InterfaceIndex(self.index),
+                NL80211Attribute::WiphyFreq(channel.nla_frequency()),
+                NL80211Attribute::ChannelWidth(channel.width()),
+                NL80211Attribute::CenterFreq1(channel.frequency()),
+            ],
         })
     }
 }

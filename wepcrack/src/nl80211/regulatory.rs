@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 use netlink_packet_utils::{
     nla::{DefaultNla, Nla, NlaBuffer, NlasIterator},
@@ -83,73 +83,76 @@ impl NL80211RegulatoryDomain {
     }
 
     pub fn get_permitted_channels<'a>(&'a self) -> Box<dyn Iterator<Item = NL80211Channel> + 'a> {
-        Box::new(NL80211Channel::all_channels().filter(|channel| {
-            //Check which regulatory rules apply
-            let mut autobw: Option<bool> = None;
-            for rule in &self.rules {
-                if !rule.freq_range_mhz().contains(&channel.frequency()) {
-                    continue;
-                }
+        let check_channel =
+            |channel_idx: u32, forbidden_flags: NL80211RegulatoryRuleFlags| -> bool {
+                assert!(NL80211Channel::is_valid_20mhz_channel_idx(channel_idx));
+                let channel_freq = NL80211Channel::channel_idx_to_freq(channel_idx).unwrap();
 
-                //Check if this rule blocks the channel
-                if rule.max_bandwidth_khz / 1000 < channel.width().bandwidth() {
-                    return false;
-                }
-
-                if rule.flags.contains(
-                    NL80211RegulatoryRuleFlags::NoOFDM
-                        | NL80211RegulatoryRuleFlags::NoCCK
-                        | NL80211RegulatoryRuleFlags::NoIndoor
-                        | NL80211RegulatoryRuleFlags::NoOutdoor
-                        | NL80211RegulatoryRuleFlags::PTPOnly
-                        | NL80211RegulatoryRuleFlags::PTMPOnly,
-                ) {
-                    return false;
-                }
-
-                if rule.flags.intersects(match channel {
-                    NL80211Channel::ChannelHT40 {
-                        main_channel,
-                        aux_channel,
-                    } => {
-                        if aux_channel < main_channel {
-                            NL80211RegulatoryRuleFlags::NoHT40Minus
-                        } else {
-                            NL80211RegulatoryRuleFlags::NoHT40Plus
-                        }
-                    }
-                    NL80211Channel::ChannelVHT80 {
-                        main_channel: _,
-                        aux_channel: _,
-                    } => NL80211RegulatoryRuleFlags::No80MHZ,
-                    NL80211Channel::ChannelVHT160 {
-                        main_channel: _,
-                        aux_channel: _,
-                    } => NL80211RegulatoryRuleFlags::No160MHZ,
-                    _ => 0.into(),
-                }) {
-                    return false;
-                }
-
-                //If multiple rules cover this channel then check that all of them have the auto-bandwidth flag set
-                if let Some(autobw) = autobw {
-                    if !autobw
-                        || !rule
-                            .flags
-                            .contains(NL80211RegulatoryRuleFlags::AutoBandwidth)
+                for rule in &self.rules {
+                    //Check if this rule covers the channel
+                    let rule_range = rule.freq_range_mhz();
+                    if !(*rule_range.start() <= channel_freq - 10
+                        && channel_freq + 10 <= *rule_range.end())
                     {
-                        return false;
+                        continue;
                     }
-                } else {
-                    autobw = Some(
-                        rule.flags
-                            .contains(NL80211RegulatoryRuleFlags::AutoBandwidth),
-                    );
-                }
-            }
 
-            true
-        }))
+                    //Check if this rule blocks the channel
+                    return !rule.flags.intersects(forbidden_flags);
+                }
+
+                false
+            };
+
+        //Filter channels
+        let base_disallowed_flags = NL80211RegulatoryRuleFlags::NoOFDM
+            | NL80211RegulatoryRuleFlags::NoCCK
+            | NL80211RegulatoryRuleFlags::NoIndoor
+            | NL80211RegulatoryRuleFlags::NoOutdoor
+            | NL80211RegulatoryRuleFlags::PTPOnly;
+
+        Box::new(
+            NL80211Channel::all_channels().filter(move |channel| match channel {
+                NL80211Channel::Channel20NoHT { channel }
+                | NL80211Channel::ChannelHT20 { channel } => {
+                    check_channel(*channel, base_disallowed_flags)
+                }
+
+                NL80211Channel::ChannelHT40 {
+                    main_channel,
+                    aux_channel,
+                } => {
+                    check_channel(
+                        *main_channel,
+                        base_disallowed_flags
+                            | if aux_channel < main_channel {
+                                NL80211RegulatoryRuleFlags::NoHT40Minus
+                            } else {
+                                NL80211RegulatoryRuleFlags::NoHT40Plus
+                            },
+                    ) && check_channel(*aux_channel, base_disallowed_flags)
+                }
+
+                NL80211Channel::ChannelVHT80 {
+                    main_channel: _,
+                    aux_channel: _,
+                } => channel.channel_range().step_by(4).all(|idx| {
+                    check_channel(
+                        idx,
+                        base_disallowed_flags | NL80211RegulatoryRuleFlags::No80MHZ,
+                    )
+                }),
+                NL80211Channel::ChannelVHT160 {
+                    main_channel: _,
+                    aux_channel: _,
+                } => channel.channel_range().step_by(4).all(|idx| {
+                    check_channel(
+                        idx,
+                        base_disallowed_flags | NL80211RegulatoryRuleFlags::No160MHZ,
+                    )
+                }),
+            }),
+        )
     }
 }
 
@@ -304,11 +307,8 @@ impl NL80211RegulatoryRule {
         (attr_buf, attr_idx)
     }
 
-    pub fn freq_range_mhz(&self) -> Range<u32> {
-        Range {
-            start: self.start_freq_khz / 1000,
-            end: self.end_freq_khz.div_ceil(1000),
-        }
+    pub fn freq_range_mhz(&self) -> RangeInclusive<u32> {
+        (self.start_freq_khz / 1000)..=(self.end_freq_khz).div_ceil(1000)
     }
 }
 
