@@ -26,10 +26,21 @@ pub struct UIChannelSelect {
 impl UIChannelSelect {
     const LIST_SIZE: usize = 16;
 
-    pub fn new() -> UIChannelSelect {
+    pub fn new(target_mon: &TargetMonitor) -> UIChannelSelect {
+        let start_channel_idx = target_mon
+            .active_channel()
+            .and_then(|active_ch| {
+                target_mon
+                    .monitor()
+                    .channels()
+                    .iter()
+                    .position(|ch| ch == active_ch)
+            })
+            .unwrap_or(0);
+
         UIChannelSelect {
-            selected_channel_idx: 0,
-            list_scroll: 0,
+            selected_channel_idx: start_channel_idx,
+            list_scroll: start_channel_idx.saturating_sub(Self::LIST_SIZE / 2),
         }
     }
 
@@ -44,7 +55,18 @@ impl UIChannelSelect {
             .iter()
             .skip(self.list_scroll)
             .take(Self::LIST_SIZE)
-            .map(|channel| ListItem::new(channel.to_string()))
+            .map(|channel| {
+                if Some(channel) == target_mon.active_channel() {
+                    ListItem::new(Line::from(vec![
+                        "> ".light_magenta(),
+                        channel.to_string().magenta(),
+                        " <".light_magenta(),
+                    ]))
+                    .bold()
+                } else {
+                    ListItem::new(channel.to_string()).into()
+                }
+            })
             .collect::<Vec<_>>();
 
         frame.render_stateful_widget(
@@ -67,7 +89,7 @@ impl UIChannelSelect {
 
     pub fn draw_channel_info(&self, target_mon: &TargetMonitor, frame: &mut Frame, area: Rect) {
         draw_ui_widget_border("Channel Information", frame, area);
-        let channel = &target_mon.monitor().channels()[self.selected_channel_idx];
+        let channel = self.selected_channel(target_mon);
 
         //Calculate the layout
         let layout = Layout::new()
@@ -203,13 +225,17 @@ impl UIChannelSelect {
             self.list_scroll = self.selected_channel_idx - Self::LIST_SIZE + 1;
         }
     }
+
+    pub fn selected_channel<'a>(&self, target_mon: &'a TargetMonitor) -> &'a NL80211Channel {
+        &target_mon.monitor().channels()[self.selected_channel_idx]
+    }
 }
 
 impl UIWidget<'_> for UIChannelSelect {
     type SharedState = TargetMonitor;
 
     fn size(&self, _: &TargetMonitor) -> u16 {
-        Self::LIST_SIZE as u16
+        Self::LIST_SIZE as u16 + 2
     }
 
     fn draw(&mut self, target_mon: &TargetMonitor, frame: &mut Frame, area: Rect) {

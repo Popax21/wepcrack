@@ -137,15 +137,15 @@ impl IEEE80211Monitor {
         })
     }
 
-    pub const fn wiphy(&self) -> &NL80211Wiphy {
-        &self.wiphy
-    }
-
     pub fn channels(&self) -> &[NL80211Channel] {
         &self.channels
     }
 
-    pub fn sniff_packet(&mut self) -> Result<IEEE80211Packet, Box<anyhow::Error>> {
+    pub fn set_channel(&self, channel: NL80211Channel) -> anyhow::Result<()> {
+        self.mon_interface.set_channel(&channel, &self.nl802111_con)
+    }
+
+    pub fn sniff_packet(&mut self) -> anyhow::Result<IEEE80211Packet> {
         //Receive a packet from the socket
         let mut rx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
         let rx_size = self
