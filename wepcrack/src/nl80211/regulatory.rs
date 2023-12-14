@@ -94,6 +94,10 @@ impl NL80211RegulatoryDomain {
                 }
 
                 //Check if this rule blocks the channel
+                if rule.max_bandwidth_khz / 1000 < channel.width().bandwidth() {
+                    return false;
+                }
+
                 if rule.flags.contains(
                     NL80211RegulatoryRuleFlags::NoOFDM
                         | NL80211RegulatoryRuleFlags::NoCCK
@@ -105,7 +109,7 @@ impl NL80211RegulatoryDomain {
                     return false;
                 }
 
-                if rule.flags.contains(match channel {
+                if rule.flags.intersects(match channel {
                     NL80211Channel::ChannelHT40 {
                         main_channel,
                         aux_channel,
