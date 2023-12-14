@@ -85,11 +85,9 @@ impl NL80211RegulatoryDomain {
     pub fn get_permitted_channels<'a>(&'a self) -> Box<dyn Iterator<Item = NL80211Channel> + 'a> {
         Box::new(NL80211Channel::all_channels().filter(|channel| {
             //Check which regulatory rules apply
-            let channel_range = channel.freq_range();
             let mut autobw: Option<bool> = None;
             for rule in &self.rules {
-                let rule_range = rule.freq_range_mhz();
-                if rule_range.start >= channel_range.end || channel_range.start >= rule_range.end {
+                if !rule.freq_range_mhz().contains(&channel.frequency()) {
                     continue;
                 }
 

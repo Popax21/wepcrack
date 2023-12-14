@@ -58,10 +58,6 @@ impl AppState {
                     IEEE80211Monitor::enter_monitor_mode(state.nl80211_con.clone(), wiphy)
                         .expect("failed to create IEEE 802.11 monitor"),
                 ));
-                println!(
-                    "channels: {:?}",
-                    state.ieee80211_mon.as_ref().unwrap().channels()
-                );
 
                 //Switch the scene to the target selector
                 state.select_target();
@@ -71,8 +67,16 @@ impl AppState {
 
     fn select_target(&mut self) {
         //Switch the scene to the device selection scene
+        let ieee80211_mon = self
+            .ieee80211_mon
+            .as_ref()
+            .expect("no IEEE 802.11 monitor has been created")
+            .clone();
+
         let state_ref = self.state_ref.clone();
-        self.new_scene = Some(Box::new(ui::target_select::UITargetSelect::new()));
+        self.new_scene = Some(Box::new(ui::target_select::UITargetSelect::new(
+            ieee80211_mon,
+        )));
     }
 }
 
