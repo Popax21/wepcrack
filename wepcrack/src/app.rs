@@ -25,29 +25,27 @@ struct AppState {
 
     new_scene: Option<Box<dyn UIScene>>,
 
-    nl80211_con: Option<NL80211Connection>,
-    ieee80211_mon: Option<IEEE80211Monitor>,
+    nl80211_con: Rc<NL80211Connection>,
+    ieee80211_mon: Option<Rc<IEEE80211Monitor>>,
 }
 
 impl AppState {
-    fn new() -> Rc<RefCell<AppState>> {
-        let state = Rc::new(RefCell::new(AppState {
-            state_ref: Weak::default(),
-            new_scene: None,
-            nl80211_con: None,
-            ieee80211_mon: None,
-        }));
-
-        state.borrow_mut().state_ref = Rc::downgrade(&state);
-
-        state
+    fn new(nl80211_con: NL80211Connection) -> Rc<RefCell<AppState>> {
+        Rc::new_cyclic(|state_ref| {
+            RefCell::new(AppState {
+                state_ref: state_ref.clone(),
+                new_scene: None,
+                nl80211_con: Rc::new(nl80211_con),
+                ieee80211_mon: None,
+            })
+        })
     }
 
     fn select_device(&mut self) {
         //Switch the scene to the device selection scene
         let state_ref = self.state_ref.clone();
         self.new_scene = Some(Box::new(ui::dev_select::UIDeviceSelect::new(
-            self.nl80211_con.as_ref().unwrap(),
+            self.nl80211_con.as_ref(),
             Box::new(move |wiphy| {
                 //Deref the state reference
                 let Some(state) = state_ref.upgrade() else {
@@ -56,10 +54,10 @@ impl AppState {
                 let mut state = state.borrow_mut();
 
                 //Create the IEEE 802.11 monitor
-                state.ieee80211_mon = Some(
-                    IEEE80211Monitor::enter_monitor_mode(state.nl80211_con.take().unwrap(), wiphy)
+                state.ieee80211_mon = Some(Rc::new(
+                    IEEE80211Monitor::enter_monitor_mode(state.nl80211_con.clone(), wiphy)
                         .expect("failed to create IEEE 802.11 monitor"),
-                );
+                ));
                 println!(
                     "channels: {:?}",
                     state.ieee80211_mon.as_ref().unwrap().channels()
@@ -90,14 +88,8 @@ impl App {
             NL80211Connection::new().context("failed to create a nl80211 connection")?;
 
         //Allocate the app state
-        let state_rc = AppState::new();
-
-        //Set up the initial app state
-        {
-            let mut state = state_rc.borrow_mut();
-            state.nl80211_con = Some(nl80211_con);
-            state.select_device();
-        }
+        let state_rc = AppState::new(nl80211_con);
+        state_rc.borrow_mut().select_device();
 
         let scene = state_rc.borrow_mut().new_scene.take().unwrap();
         Ok(App {

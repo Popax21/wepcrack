@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, rc::Rc};
 
 use anyhow::Context;
 use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, ETH_P_ALL, SOCK_RAW};
@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub struct IEEE80211Monitor {
-    nl802111_con: NL80211Connection,
+    nl802111_con: Rc<NL80211Connection>,
 
     wiphy: NL80211Wiphy,
     channels: Vec<NL80211Channel>,
@@ -32,7 +32,7 @@ pub struct IEEE80211Monitor {
 
 impl IEEE80211Monitor {
     pub fn enter_monitor_mode(
-        nl80211_con: NL80211Connection,
+        nl80211_con: Rc<NL80211Connection>,
         wiphy: NL80211Wiphy,
     ) -> anyhow::Result<IEEE80211Monitor> {
         //Obtain a list of all interfaces
