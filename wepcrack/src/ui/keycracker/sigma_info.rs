@@ -25,8 +25,8 @@ impl SigmaInfoWidget {
 impl<'a> UIWidget<'a> for SigmaInfoWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self, _cracker: &KeyCracker) -> Constraint {
-        Constraint::Length(2 + WepKey::LEN_104 as u16)
+    fn size(&self, _cracker: &KeyCracker) -> u16 {
+        2 + WepKey::LEN_104 as u16
     }
 
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {

@@ -203,8 +203,8 @@ impl DeviceListWidget {
 impl UIWidget<'_> for DeviceListWidget {
     type SharedState = DeviceList;
 
-    fn size(&self, dev_list: &DeviceList) -> Constraint {
-        Constraint::Length(2 + 4 * dev_list.devices().len() as u16)
+    fn size(&self, dev_list: &DeviceList) -> u16 {
+        2 + 4 * dev_list.devices().len() as u16
     }
 
     fn draw(&mut self, dev_list: &DeviceList, frame: &mut Frame, area: Rect) {

@@ -136,8 +136,8 @@ impl OverviewWidget {
 impl<'a> UIWidget<'a> for OverviewWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self, _cracker: &KeyCracker) -> Constraint {
-        Constraint::Length(2 + 1 + 1 + 1 + 1 + 2)
+    fn size(&self, _cracker: &KeyCracker) -> u16 {
+        2 + 1 + 1 + 1 + 1 + 2
     }
 
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {

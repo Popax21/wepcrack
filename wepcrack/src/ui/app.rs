@@ -15,7 +15,7 @@ pub trait UIScene {
 pub trait UIWidget<'a> {
     type SharedState;
 
-    fn size(&self, shared_state: &Self::SharedState) -> Constraint;
+    fn size(&self, shared_state: &Self::SharedState) -> u16;
     fn draw(&mut self, shared_state: &Self::SharedState, frame: &mut Frame, area: Rect);
 }
 
@@ -31,7 +31,7 @@ pub fn draw_ui_widgets<S>(
         .constraints(
             widgets
                 .iter()
-                .map(|w| w.size(state))
+                .map(|w| Constraint::Length(w.size(state)))
                 .chain(std::iter::once(Constraint::Min(0)))
                 .collect::<Vec<_>>(),
         )

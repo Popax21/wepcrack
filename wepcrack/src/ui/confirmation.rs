@@ -51,8 +51,8 @@ impl<'a, S> ConfirmationWidget<'a, S> {
 impl<S> UIWidget<'_> for ConfirmationWidget<'_, S> {
     type SharedState = S;
 
-    fn size(&self, _: &S) -> Constraint {
-        Constraint::Length(5)
+    fn size(&self, _: &S) -> u16 {
+        5
     }
 
     fn draw(&mut self, _: &S, frame: &mut Frame, area: Rect) {

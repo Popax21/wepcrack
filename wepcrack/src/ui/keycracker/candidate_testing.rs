@@ -94,8 +94,8 @@ impl CandidateKeyTestingWidget {
 impl<'a> UIWidget<'a> for CandidateKeyTestingWidget {
     type SharedState = KeyCracker<'a>;
 
-    fn size(&self, _cracker: &KeyCracker) -> Constraint {
-        Constraint::Length(5)
+    fn size(&self, _cracker: &KeyCracker) -> u16 {
+        5
     }
 
     fn draw(&mut self, cracker: &KeyCracker, frame: &mut Frame, area: Rect) {
