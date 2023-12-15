@@ -2,7 +2,8 @@ use std::{
     rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        mpsc::{self, Receiver, Sender},
+        Arc, Mutex,
     },
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -27,7 +28,7 @@ pub struct ARPSampleSupplier {
     acceptor_thread: Option<JoinHandle<()>>,
 
     should_exit: Arc<AtomicBool>,
-    sample_queue: Arc<concurrent_queue::ConcurrentQueue<KeystreamSample>>,
+    sample_recv: Mutex<Receiver<KeystreamSample>>,
 }
 
 impl ARPSampleSupplier {
@@ -116,7 +117,7 @@ impl ARPSampleSupplier {
         ap_mac: MacAddress,
         arp_request: Frame<'static>,
     ) -> Self {
-        let sample_queue = Arc::new(concurrent_queue::ConcurrentQueue::unbounded());
+        let (sample_tx, sample_rx) = mpsc::channel();
         let should_exit = Arc::new(AtomicBool::new(false));
 
         //Launch the threads
@@ -141,7 +142,6 @@ impl ARPSampleSupplier {
                 .create_sniffer()
                 .expect("failed to create sniffer for acceptor thread");
 
-            let sample_queue = sample_queue.clone();
             let should_exit = should_exit.clone();
             Some(
                 std::thread::Builder::new()
@@ -149,7 +149,7 @@ impl ARPSampleSupplier {
                     .spawn(move || {
                         Self::acceptor_thread(
                             sniffer,
-                            sample_queue.as_ref(),
+                            sample_tx,
                             ap_mac,
                             dev_mac,
                             should_exit.as_ref(),
@@ -163,7 +163,7 @@ impl ARPSampleSupplier {
             replay_thread,
             acceptor_thread,
 
-            sample_queue,
+            sample_recv: Mutex::new(sample_rx),
             should_exit,
         }
     }
@@ -178,13 +178,13 @@ impl ARPSampleSupplier {
                 .inject_frame(&arp_request)
                 .expect("failed to inject replayed ARP request");
 
-            std::thread::sleep(Duration::from_micros(3500));
+            std::thread::sleep(Duration::from_micros(3000));
         }
     }
 
     fn acceptor_thread(
         mut sniffer: IEEE80211PacketSniffer,
-        sample_queue: &concurrent_queue::ConcurrentQueue<KeystreamSample>,
+        sample_sender: Sender<KeystreamSample>,
         ap_mac: MacAddress,
         dev_mac: MacAddress,
         should_exit: &AtomicBool,
@@ -247,46 +247,44 @@ impl ARPSampleSupplier {
                 }
 
                 //Put it into the queue
-                if sample_queue
-                    .push(KeystreamSample { keystream, iv })
-                    .is_err()
-                {
-                    panic!("failed to push sample to queue");
-                }
+                sample_sender
+                    .send(KeystreamSample { keystream, iv })
+                    .expect("failed to push sample to queue");
             }
         }
     }
 
-    pub fn provide_sample(&mut self, should_exit: &AtomicBool) -> Option<KeystreamSample> {
+    pub fn provide_sample(&mut self, _should_exit: &AtomicBool) -> Option<KeystreamSample> {
         const TIMEOUT: Duration = Duration::from_millis(10);
 
         let replay_thread = self.replay_thread.as_ref().unwrap();
         let acceptor_thread = self.acceptor_thread.as_ref().unwrap();
 
-        let start = Instant::now();
-        while !should_exit.load(Ordering::SeqCst) && start.elapsed() < TIMEOUT {
-            //Ensure neither thread has finished
-            if replay_thread.is_finished() {
-                if let Some(Err(e)) = self.replay_thread.take().map(JoinHandle::join) {
-                    std::panic::resume_unwind(e);
-                } else {
-                    panic!("replay thread exited prematurely");
-                }
-            }
+        //Pop a sample from the queue
+        if let Ok(sample) = {
+            let sample_recv = self
+                .sample_recv
+                .lock()
+                .expect("failed to lock sample receiver");
+            sample_recv.recv_timeout(TIMEOUT)
+        } {
+            return Some(sample);
+        };
 
-            if acceptor_thread.is_finished() {
-                if let Some(Err(e)) = self.acceptor_thread.take().map(JoinHandle::join) {
-                    std::panic::resume_unwind(e);
-                } else {
-                    panic!("acceptor thread exited prematurely");
-                }
+        //Ensure neither thread has finished
+        if replay_thread.is_finished() {
+            if let Some(Err(e)) = self.replay_thread.take().map(JoinHandle::join) {
+                std::panic::resume_unwind(e);
+            } else {
+                panic!("replay thread exited prematurely");
             }
+        }
 
-            //Pop a sample from the queue
-            match self.sample_queue.pop() {
-                Ok(sample) => return Some(sample),
-                Err(concurrent_queue::PopError::Empty) => std::thread::yield_now(),
-                Err(e) => panic!("failed to pop sample from queue: {e}"),
+        if acceptor_thread.is_finished() {
+            if let Some(Err(e)) = self.acceptor_thread.take().map(JoinHandle::join) {
+                std::panic::resume_unwind(e);
+            } else {
+                panic!("acceptor thread exited prematurely");
             }
         }
 

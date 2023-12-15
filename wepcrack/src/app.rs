@@ -128,7 +128,7 @@ impl AppState {
             key_predictor_strong_threshold: 0.025,
             num_test_samples: 1024,
             test_sample_period: 128,
-            test_sample_threshold: 0.7,
+            test_sample_threshold: 0.25,
         };
 
         self.new_scene = Some(Box::new(ui::keycracker::UIKeyCracker::new(
