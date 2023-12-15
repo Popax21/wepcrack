@@ -46,7 +46,7 @@ impl AppState {
         let state_ref = self.state_ref.clone();
         self.new_scene = Some(Box::new(ui::dev_select::UIDeviceSelect::new(
             self.nl80211_con.as_ref(),
-            Box::new(move |wiphy| {
+            move |wiphy| {
                 //Deref the state reference
                 let Some(state) = state_ref.upgrade() else {
                     return;
@@ -61,7 +61,7 @@ impl AppState {
 
                 //Switch the scene to the target selector
                 state.select_target();
-            }),
+            },
         )));
     }
 
@@ -76,6 +76,7 @@ impl AppState {
         let state_ref = self.state_ref.clone();
         self.new_scene = Some(Box::new(ui::target_select::UITargetSelect::new(
             ieee80211_mon,
+            move |ap_mac, dev_mac| todo!("{ap_mac} {dev_mac}"),
         )));
     }
 }

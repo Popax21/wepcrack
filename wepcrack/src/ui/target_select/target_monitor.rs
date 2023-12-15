@@ -44,6 +44,29 @@ impl TargetAccessPoint {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TargetDevice {
+    mac_address: MacAddress,
+    strength_dbm: f32,
+}
+
+impl TargetDevice {
+    pub const fn mac_address(&self) -> &MacAddress {
+        &self.mac_address
+    }
+
+    pub const fn strength_dbm(&self) -> i32 {
+        self.strength_dbm as i32
+    }
+
+    fn update_strength(&mut self, new_strength: i32) {
+        const STRENGTH_BLEED: f32 = 0.9;
+
+        self.strength_dbm =
+            self.strength_dbm * STRENGTH_BLEED + new_strength as f32 * (1. - STRENGTH_BLEED);
+    }
+}
+
 pub struct TargetMonitor {
     monitor: Rc<IEEE80211Monitor>,
     active_channel: Option<NL80211Channel>,
@@ -132,8 +155,24 @@ impl TargetMonitor {
     }
 
     pub fn sniff_devices(&mut self, ap_mac: MacAddress) {
+        assert!(ap_mac.is_unicast());
+
         if let Ok(mut sniffer_data) = self.sniffer_thread_data.lock_dominant() {
-            sniffer_data.mode = TargetSnifferMode::Devices { ap_mac };
+            sniffer_data.mode = TargetSnifferMode::Devices {
+                ap_mac,
+                devices: HashMap::new(),
+            };
+        }
+    }
+
+    pub fn get_sniffed_devices(&self) -> Vec<TargetDevice> {
+        if let Ok(sniffer_data) = self.sniffer_thread_data.lock_dominant() {
+            let TargetSnifferMode::Devices { ap_mac: _, devices } = &sniffer_data.mode else {
+                panic!("target sniffer not currently sniffing for target devices");
+            };
+            devices.values().cloned().collect::<Vec<_>>()
+        } else {
+            Vec::default()
         }
     }
 }
@@ -158,6 +197,7 @@ enum TargetSnifferMode {
     },
     Devices {
         ap_mac: MacAddress,
+        devices: HashMap<MacAddress, TargetDevice>,
     },
 }
 
@@ -186,6 +226,9 @@ fn sniff_ap_packet(
             let Some(ap_mac) = beacon.transmitter_address() else {
                 return;
             };
+            if !ap_mac.is_unicast() {
+                return;
+            }
 
             let mut ssid: Option<String> =
                 beacon.ssid().and_then(|ssid| String::from_utf8(ssid).ok());
@@ -223,6 +266,9 @@ fn sniff_ap_packet(
         DSStatus::FromSTAToDS => MacAddress::from_bytes(&frame.bytes()[4..10]).unwrap(),
         DSStatus::WDSOrMesh => return,
     };
+    if !ap_mac.is_unicast() {
+        return;
+    }
 
     //Register / Update the AP
     match access_points.get_mut(&ap_mac) {
@@ -234,6 +280,58 @@ fn sniff_ap_packet(
                     mac_address: ap_mac,
                     strength_dbm: signal_strength_dbm as f32,
                     ssid: None,
+                },
+            );
+        }
+    }
+}
+
+fn sniff_dev_packet(
+    sniffer: &mut IEEE80211PacketSniffer,
+    target_ap_mac: &MacAddress,
+    devices: &mut HashMap<MacAddress, TargetDevice>,
+) {
+    //Sniff a packet
+    let Some(packet) = sniffer
+        .sniff_packet()
+        .expect("failed to sniff a 802.11 packet")
+    else {
+        return;
+    };
+    let frame = packet.ieee80211_frame();
+    let signal_strength_dbm = packet.radiotap().antenna_signal.map_or(0, |v| v.value) as i32;
+
+    //Extract and check the AP MAC address (if any)
+    let ap_mac = match frame.ds_status() {
+        DSStatus::NotLeavingDSOrADHOC => return,
+        DSStatus::FromDSToSTA => MacAddress::from_bytes(&frame.bytes()[10..16]).unwrap(),
+        DSStatus::FromSTAToDS => MacAddress::from_bytes(&frame.bytes()[4..10]).unwrap(),
+        DSStatus::WDSOrMesh => return,
+    };
+    if &ap_mac != target_ap_mac {
+        return;
+    }
+
+    //Extract the device MAC address
+    let dev_mac = match frame.ds_status() {
+        DSStatus::NotLeavingDSOrADHOC => return,
+        DSStatus::FromDSToSTA => MacAddress::from_bytes(&frame.bytes()[4..10]).unwrap(),
+        DSStatus::FromSTAToDS => MacAddress::from_bytes(&frame.bytes()[10..16]).unwrap(),
+        DSStatus::WDSOrMesh => return,
+    };
+    if !dev_mac.is_unicast() {
+        return;
+    }
+
+    //Register / Update the AP
+    match devices.get_mut(&dev_mac) {
+        Some(dev) => dev.update_strength(signal_strength_dbm),
+        None => {
+            devices.insert(
+                dev_mac,
+                TargetDevice {
+                    mac_address: dev_mac,
+                    strength_dbm: signal_strength_dbm as f32,
                 },
             );
         }
@@ -261,7 +359,9 @@ fn sniffer_thread_func(
             TargetSnifferMode::AccessPoints { access_points } => {
                 sniff_ap_packet(&mut sniffer, access_points)
             }
-            TargetSnifferMode::Devices { ap_mac } => todo!(),
+            TargetSnifferMode::Devices { ap_mac, devices } => {
+                sniff_dev_packet(&mut sniffer, &ap_mac, devices)
+            }
         }
     }
 }

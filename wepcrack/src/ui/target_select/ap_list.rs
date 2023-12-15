@@ -59,6 +59,11 @@ impl UIAccessPointList {
 
         //Update the selected AP
         let mut aps = target_mon.get_sniffed_aps();
+
+        if aps.is_empty() {
+            return;
+        }
+
         aps.sort_by_key(|ap| -ap.strength_dbm());
 
         let mut ap_idx = aps
@@ -76,7 +81,7 @@ impl UIAccessPointList {
         self.update_list_scroll(ap_idx);
     }
 
-    pub const fn selected_ap(&self) -> &MacAddress {
+    pub const fn selected_access_point(&self) -> &MacAddress {
         &self.selected_ap_mac
     }
 }
@@ -95,6 +100,10 @@ impl UIWidget<'_> for UIAccessPointList {
         //Find the currently selected access point in the list
         let mut aps = target_mon.get_sniffed_aps();
         aps.sort_by_key(|ap| -ap.strength_dbm());
+
+        if self.selected_ap_mac.is_nil() && aps.len() > 0 {
+            self.selected_ap_mac = *aps[0].mac_address();
+        }
 
         let selected_ap_idx = aps
             .iter()

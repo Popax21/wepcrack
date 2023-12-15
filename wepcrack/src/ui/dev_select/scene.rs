@@ -19,7 +19,7 @@ impl UIDeviceSelect {
     #[allow(clippy::new_without_default)]
     pub fn new(
         nl80211_con: &NL80211Connection,
-        callback: Box<dyn FnOnce(NL80211Wiphy)>,
+        callback: impl FnOnce(NL80211Wiphy) + 'static,
     ) -> UIDeviceSelect {
         //Query the device list
         let dev_list =
@@ -29,7 +29,7 @@ impl UIDeviceSelect {
             dev_list_widget: DeviceListWidget::new(&dev_list),
             dev_list,
             confirmation: None,
-            callback: Some(callback),
+            callback: Some(Box::new(callback)),
         }
     }
 }
