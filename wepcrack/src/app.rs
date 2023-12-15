@@ -1,12 +1,16 @@
 use crate::arp_supplier::ARPSampleSupplier;
 use crate::ieee80211::IEEE80211Monitor;
+use crate::keycracker::KeystreamSample;
 use crate::ui::keycracker::KeyCrackerSettings;
 use crate::ui::UIScene;
+use crate::wep::{WepIV, WepKey};
 use crate::TERMINAL_LOCK;
 use crate::{nl80211::NL80211Connection, ui};
 
 use anyhow::Context;
 use crossterm::event::{self, Event, KeyCode};
+use hex::FromHex;
+use rand::RngCore;
 use ratatui::{
     prelude::{Alignment, Constraint, CrosstermBackend, Direction, Layout},
     style::Stylize,
@@ -136,6 +140,30 @@ impl AppState {
             Box::new(move |should_exit| sample_prov.provide_sample(should_exit)),
         )));
     }
+
+    fn keycrack_simulate(&mut self, key: WepKey) {
+        //Switch the scene to the key cracking scene
+        const KEYCRACK_SETTINGS: KeyCrackerSettings = KeyCrackerSettings {
+            key_predictor_normal_threshold: 0.50,
+            key_predictor_strong_threshold: 0.35,
+            num_test_samples: 1024,
+            test_sample_period: 128,
+            test_sample_threshold: 1.,
+        };
+
+        self.new_scene = Some(Box::new(ui::keycracker::UIKeyCracker::new(
+            KEYCRACK_SETTINGS,
+            Box::new(move |_should_exit| {
+                let mut iv = WepIV::default();
+                rand::thread_rng().fill_bytes(&mut iv);
+
+                let mut keystream = [0u8; 16];
+                key.create_rc4(&iv).gen_keystream(&mut keystream);
+
+                Some(KeystreamSample { iv, keystream })
+            }),
+        )));
+    }
 }
 
 pub struct App {
@@ -151,7 +179,23 @@ impl App {
 
         //Allocate the app state
         let state_rc = AppState::new(nl80211_con);
-        state_rc.borrow_mut().select_device();
+
+        if let Ok(simulate_key) = std::env::var("WEPCRACK_SIMULATE_KEY") {
+            let simulate_key = match simulate_key.len() {
+                10 => WepKey::Wep40Key(
+                    <[u8; WepKey::LEN_40]>::from_hex(simulate_key)
+                        .expect("failed to parse WEP key"),
+                ),
+                26 => WepKey::Wep104Key(
+                    <[u8; WepKey::LEN_104]>::from_hex(simulate_key)
+                        .expect("failed to parse WEP key"),
+                ),
+                _ => panic!("invalid WEP key length"),
+            };
+            state_rc.borrow_mut().keycrack_simulate(simulate_key);
+        } else {
+            state_rc.borrow_mut().select_device();
+        }
 
         let scene = state_rc.borrow_mut().new_scene.take().unwrap();
         Ok(App {
