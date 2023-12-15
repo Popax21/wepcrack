@@ -64,7 +64,7 @@ impl UIChannelSelect {
                     ]))
                     .bold()
                 } else {
-                    ListItem::new(format!("  {channel}  ")).into()
+                    ListItem::new(format!("  {channel}  "))
                 }
             })
             .collect::<Vec<_>>();

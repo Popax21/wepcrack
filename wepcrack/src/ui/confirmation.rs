@@ -23,9 +23,9 @@ pub struct ConfirmationWidget<'a, S> {
 impl<'a, S> ConfirmationWidget<'a, S> {
     pub fn new(message: Line<'a>) -> ConfirmationWidget<'a, S> {
         ConfirmationWidget {
-            message: message,
+            message,
             selected_opt: false,
-            _s: PhantomData::default(),
+            _s: PhantomData,
         }
     }
 
