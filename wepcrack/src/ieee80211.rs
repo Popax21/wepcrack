@@ -188,11 +188,19 @@ impl IEEE80211PacketSniffer {
         //Receive a packet from the socket
         let mut rx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
 
-        let rx_size = match self.0.read(&mut rx_buf) {
-            Ok(rx_size) => rx_size,
-            Err(err) if err.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
-            Err(err) => {
-                return Err(anyhow::anyhow!(err).context("failed to read packet from packet socket"))
+        let rx_size = 'rx_loop: loop {
+            match self.0.read(&mut rx_buf) {
+                Ok(rx_size) => break 'rx_loop rx_size,
+                Err(err) if err.raw_os_error() == Some(11) => {
+                    //Resource temporarily unavailable
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
+                Err(err) => {
+                    return Err(
+                        anyhow::anyhow!(err).context("failed to read packet from packet socket")
+                    )
+                }
             }
         };
 
@@ -200,6 +208,32 @@ impl IEEE80211PacketSniffer {
             IEEE80211Packet::try_from(&rx_buf[..rx_size])
                 .context("failed to parse 802.11 packet")?,
         ))
+    }
+
+    pub fn inject_frame(&mut self, frame: &impl ieee80211::FrameTrait) -> anyhow::Result<()> {
+        //Send the packet through the socket
+        let mut tx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
+        let tx_len = 8 + frame.bytes().len();
+        tx_buf[2..4].copy_from_slice(&8u16.to_le_bytes());
+        tx_buf[8..tx_len].copy_from_slice(frame.bytes());
+
+        let tx_size = 'tx_loop: loop {
+            match self.0.send(&tx_buf[..tx_len]) {
+                Ok(tx_size) => break 'tx_loop tx_size,
+                Err(err) if err.raw_os_error() == Some(11) => {
+                    //Resource temporarily unavailable
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(err) => {
+                    return Err(
+                        anyhow::anyhow!(err).context("failed to send packet through packet socket")
+                    );
+                }
+            };
+        };
+        assert_eq!(tx_size, tx_len);
+
+        Ok(())
     }
 }
 

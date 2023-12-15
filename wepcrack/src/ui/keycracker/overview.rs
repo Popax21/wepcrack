@@ -133,8 +133,8 @@ impl OverviewWidget {
     }
 }
 
-impl<'a> UIWidget<'a> for OverviewWidget {
-    type SharedState = KeyCracker<'a>;
+impl UIWidget<'_> for OverviewWidget {
+    type SharedState = KeyCracker;
 
     fn size(&self, _cracker: &KeyCracker) -> u16 {
         2 + 1 + 1 + 1 + 1 + 2

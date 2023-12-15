@@ -92,11 +92,14 @@ impl UIScene for UIDeviceSelect {
                 }
 
                 //Ask for confirmation
-                self.confirmation = Some(ConfirmationWidget::new(Line::from(vec![
-                    "Do you want to switch wiphy ".into(),
-                    dev.name().to_owned().bold(),
-                    " into monitor mode?".into(),
-                ])));
+                self.confirmation = Some(ConfirmationWidget::new(
+                    Line::from(vec![
+                        "Do you want to switch wiphy ".into(),
+                        dev.name().to_owned().bold(),
+                        " into monitor mode?".into(),
+                    ])
+                    .into(),
+                ));
                 return;
             }
         }

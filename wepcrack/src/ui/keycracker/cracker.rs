@@ -1,3 +1,5 @@
+use std::sync::{atomic::AtomicBool, Arc};
+
 use crate::{
     keycracker::{KeyPredictor, KeyTester, KeystreamSample, TestSampleBuffer},
     wep::WepKey,
@@ -14,7 +16,7 @@ pub struct KeyCrackerSettings {
     pub test_sample_threshold: f64,
 }
 
-pub type KeyCrackerSampleProvider = dyn FnMut() -> KeystreamSample + Send + Sync;
+pub type KeyCrackerSampleProvider = dyn FnMut(&AtomicBool) -> Option<KeystreamSample> + Send + Sync;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum KeyCrackerPhase {
@@ -24,12 +26,13 @@ pub(super) enum KeyCrackerPhase {
     FinishedFailure,
 }
 
-pub(super) struct KeyCracker<'a> {
+pub(super) struct KeyCracker {
     phase: KeyCrackerPhase,
     delay_timer: usize,
 
     settings: KeyCrackerSettings,
-    sample_provider: &'a mut KeyCrackerSampleProvider,
+    sample_provider: Box<KeyCrackerSampleProvider>,
+    should_exit: Arc<AtomicBool>,
 
     key_predictor: KeyPredictor,
     test_sample_buf: TestSampleBuffer,
@@ -38,17 +41,19 @@ pub(super) struct KeyCracker<'a> {
     cracked_key: Option<WepKey>,
 }
 
-impl KeyCracker<'_> {
+impl KeyCracker {
     pub fn new(
         settings: KeyCrackerSettings,
-        sample_provider: &mut KeyCrackerSampleProvider,
-    ) -> KeyCracker<'_> {
+        sample_provider: Box<KeyCrackerSampleProvider>,
+        should_exit: Arc<AtomicBool>,
+    ) -> KeyCracker {
         KeyCracker {
             phase: KeyCrackerPhase::SampleCollection,
             delay_timer: 0,
 
             settings,
             sample_provider,
+            should_exit,
 
             key_predictor: KeyPredictor::new(),
             test_sample_buf: TestSampleBuffer::new(
@@ -119,7 +124,7 @@ impl KeyCracker<'_> {
         match self.phase {
             KeyCrackerPhase::SampleCollection => {
                 //Collect a sample and feed it to the predictor and test sample buffer
-                let sample = (self.sample_provider)();
+                let sample = (self.sample_provider)(self.should_exit.as_ref()).unwrap();
                 self.key_predictor.accept_sample(&sample);
                 self.test_sample_buf.accept_sample(&sample);
 

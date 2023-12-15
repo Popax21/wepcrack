@@ -22,8 +22,8 @@ impl SigmaInfoWidget {
     }
 }
 
-impl<'a> UIWidget<'a> for SigmaInfoWidget {
-    type SharedState = KeyCracker<'a>;
+impl UIWidget<'_> for SigmaInfoWidget {
+    type SharedState = KeyCracker;
 
     fn size(&self, _cracker: &KeyCracker) -> u16 {
         2 + WepKey::LEN_104 as u16

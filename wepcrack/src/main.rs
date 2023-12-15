@@ -9,6 +9,7 @@ use std::{
 };
 
 pub mod app;
+pub mod arp_supplier;
 pub mod ieee80211;
 pub mod keycracker;
 pub mod netlink;

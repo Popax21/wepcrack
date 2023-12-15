@@ -8,18 +8,18 @@ use super::{
     KeyCrackerThread, OverviewWidget, SigmaInfoWidget,
 };
 
-pub struct UIKeyCracker<'a> {
-    cracker_thread: KeyCrackerThread<'a>,
+pub struct UIKeyCracker {
+    cracker_thread: KeyCrackerThread,
 
     overview_widget: OverviewWidget,
     sigma_info_widget: SigmaInfoWidget,
     candidate_testing_widget: CandidateKeyTestingWidget,
 }
 
-impl UIKeyCracker<'_> {
+impl UIKeyCracker {
     pub fn new(
         cracker_settings: KeyCrackerSettings,
-        sample_provider: &mut KeyCrackerSampleProvider,
+        sample_provider: Box<KeyCrackerSampleProvider>,
     ) -> UIKeyCracker {
         UIKeyCracker {
             cracker_thread: KeyCrackerThread::launch(cracker_settings, sample_provider),
@@ -31,7 +31,7 @@ impl UIKeyCracker<'_> {
     }
 }
 
-impl UIScene for UIKeyCracker<'_> {
+impl UIScene for UIKeyCracker {
     fn should_quit(&self) -> bool {
         self.cracker_thread.did_crash()
     }

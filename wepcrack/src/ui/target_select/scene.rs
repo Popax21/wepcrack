@@ -205,15 +205,17 @@ impl UIScene for UITargetSelect {
                     if let Event::Key(key) = event {
                         if key.kind == KeyEventKind::Press && key.code == KeyCode::Enter {
                             if !ap_list_widget.selected_access_point().is_nil() {
-                                *confirmation_widget_opt =
-                                    Some(ConfirmationWidget::new(Line::from(vec![
+                                *confirmation_widget_opt = Some(ConfirmationWidget::new(
+                                    Line::from(vec![
                                         "Do you want to select AP ".into(),
                                         ap_list_widget
                                             .selected_access_point()
                                             .to_hex_string()
                                             .bold(),
                                         " as the target access point?".into(),
-                                    ])));
+                                    ])
+                                    .into(),
+                                ));
                             }
                             return;
                         }
@@ -248,12 +250,14 @@ impl UIScene for UITargetSelect {
                     if let Event::Key(key) = event {
                         if key.kind == KeyEventKind::Press && key.code == KeyCode::Enter {
                             if !dev_list_widget.selected_device().is_nil() {
-                                *confirmation_widget_opt =
-                                    Some(ConfirmationWidget::new(Line::from(vec![
+                                *confirmation_widget_opt = Some(ConfirmationWidget::new(
+                                    Line::from(vec![
                                         "Do you want to select device ".into(),
                                         dev_list_widget.selected_device().to_hex_string().bold(),
                                         " as the target device?".into(),
-                                    ])));
+                                    ])
+                                    .into(),
+                                ));
                             }
                             return;
                         }

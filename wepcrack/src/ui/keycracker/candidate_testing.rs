@@ -91,8 +91,8 @@ impl CandidateKeyTestingWidget {
     }
 }
 
-impl<'a> UIWidget<'a> for CandidateKeyTestingWidget {
-    type SharedState = KeyCracker<'a>;
+impl UIWidget<'_> for CandidateKeyTestingWidget {
+    type SharedState = KeyCracker;
 
     fn size(&self, _cracker: &KeyCracker) -> u16 {
         5

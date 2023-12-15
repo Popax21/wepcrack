@@ -4,7 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{
     prelude::{Constraint, Layout, Rect},
     style::Stylize,
-    text::Line,
+    text::{Line, Text},
     widgets::Paragraph,
     Frame,
 };
@@ -14,14 +14,14 @@ use crate::ui::draw_ui_widget_border;
 use super::UIWidget;
 
 pub struct ConfirmationWidget<'a, S> {
-    message: Line<'a>,
+    message: Text<'a>,
     selected_opt: bool,
 
     _s: PhantomData<S>,
 }
 
 impl<'a, S> ConfirmationWidget<'a, S> {
-    pub fn new(message: Line<'a>) -> ConfirmationWidget<'a, S> {
+    pub fn new(message: Text<'a>) -> ConfirmationWidget<'a, S> {
         ConfirmationWidget {
             message,
             selected_opt: false,
@@ -52,7 +52,7 @@ impl<S> UIWidget<'_> for ConfirmationWidget<'_, S> {
     type SharedState = S;
 
     fn size(&self, _: &S) -> u16 {
-        5
+        4 + self.message.lines.len() as u16
     }
 
     fn draw(&mut self, _: &S, frame: &mut Frame, area: Rect) {
@@ -62,7 +62,7 @@ impl<S> UIWidget<'_> for ConfirmationWidget<'_, S> {
         let [msg_area, yes_area, no_area] = *Layout::new()
             .margin(1)
             .constraints([
-                Constraint::Length(1),
+                Constraint::Length(self.message.lines.len() as u16),
                 Constraint::Length(1),
                 Constraint::Length(1),
             ])

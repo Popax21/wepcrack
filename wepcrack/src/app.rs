@@ -1,4 +1,6 @@
+use crate::arp_supplier::ARPSampleSupplier;
 use crate::ieee80211::IEEE80211Monitor;
+use crate::ui::keycracker::KeyCrackerSettings;
 use crate::ui::UIScene;
 use crate::TERMINAL_LOCK;
 use crate::{nl80211::NL80211Connection, ui};
@@ -76,7 +78,61 @@ impl AppState {
         let state_ref = self.state_ref.clone();
         self.new_scene = Some(Box::new(ui::target_select::UITargetSelect::new(
             ieee80211_mon,
-            move |ap_mac, dev_mac| todo!("{ap_mac} {dev_mac}"),
+            move |ap_mac, dev_mac| {
+                //Deref the state reference
+                let Some(state) = state_ref.upgrade() else {
+                    return;
+                };
+                let mut state = state.borrow_mut();
+
+                //Switch the scene to attack preparation
+                state.attack_preparation(ap_mac, dev_mac);
+            },
+        )));
+    }
+
+    fn attack_preparation(
+        &mut self,
+        ap_mac: ieee80211::MacAddress,
+        dev_mac: ieee80211::MacAddress,
+    ) {
+        //Switch the scene to the attack preparation scene
+        let ieee80211_mon = self
+            .ieee80211_mon
+            .as_ref()
+            .expect("no 802.11 monitor has been created")
+            .clone();
+
+        let state_ref = self.state_ref.clone();
+        self.new_scene = Some(Box::new(ui::attack_prep::UIAttackPrep::new(
+            ieee80211_mon,
+            ap_mac,
+            dev_mac,
+            move |prov| {
+                //Deref the state reference
+                let Some(state) = state_ref.upgrade() else {
+                    return;
+                };
+                let mut state = state.borrow_mut();
+
+                //Switch the scene to key cracking
+                state.keycrack(prov);
+            },
+        )));
+    }
+
+    fn keycrack(&mut self, mut sample_prov: ARPSampleSupplier) {
+        //Switch the scene to the key cracking scene
+        const KEYCRACK_SETTINGS: KeyCrackerSettings = KeyCrackerSettings {
+            key_predictor_threshold: 0.35,
+            num_test_samples: 2048,
+            test_sample_period: 512,
+            test_sample_threshold: 0.9,
+        };
+
+        self.new_scene = Some(Box::new(ui::keycracker::UIKeyCracker::new(
+            KEYCRACK_SETTINGS,
+            Box::new(move |should_exit| sample_prov.provide_sample(should_exit)),
         )));
     }
 }

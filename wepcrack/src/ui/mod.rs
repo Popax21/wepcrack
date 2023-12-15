@@ -1,4 +1,5 @@
 pub mod app;
+pub mod attack_prep;
 pub mod confirmation;
 pub use app::*;
 pub use confirmation::*;
