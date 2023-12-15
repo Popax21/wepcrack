@@ -147,9 +147,14 @@ impl UIScene for UIAttackPrep {
                         let dev_mac = self.dev_mac;
                         let attempt = self.prep_attempt.clone();
 
-                        self.thread = Some(std::thread::spawn(move || {
-                            prep_thread_fnc(ap_mac, dev_mac, &mut sniffer, attempt.as_ref())
-                        }));
+                        self.thread = Some(
+                            std::thread::Builder::new()
+                                .name("attack prep thread".into())
+                                .spawn(move || {
+                                    prep_thread_fnc(ap_mac, dev_mac, &mut sniffer, attempt.as_ref())
+                                })
+                                .expect("failed to spawn prep thread"),
+                        );
 
                         self.prep_stage = PreparationStage::DidConfirm;
                     } else {

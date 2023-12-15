@@ -94,13 +94,16 @@ impl TargetMonitor {
             let should_exit = should_exit.clone();
             let sniffer_thread_data = sniffer_thread_data.clone();
 
-            std::thread::spawn(move || {
-                sniffer_thread_func(
-                    ieee80211_sniffer,
-                    should_exit.as_ref(),
-                    sniffer_thread_data.as_ref(),
-                )
-            })
+            std::thread::Builder::new()
+                .name("target sniffer thread".into())
+                .spawn(move || {
+                    sniffer_thread_func(
+                        ieee80211_sniffer,
+                        should_exit.as_ref(),
+                        sniffer_thread_data.as_ref(),
+                    )
+                })
+                .expect("failed to spawn sniffer thread")
         };
 
         TargetMonitor {

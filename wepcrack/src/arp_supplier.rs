@@ -126,9 +126,14 @@ impl ARPSampleSupplier {
                 .expect("failed to create sniffer for replay thread");
 
             let should_exit = should_exit.clone();
-            Some(std::thread::spawn(move || {
-                Self::replay_thread_fnc(sniffer, arp_request, should_exit.as_ref())
-            }))
+            Some(
+                std::thread::Builder::new()
+                    .name("ARP replayer thread".into())
+                    .spawn(move || {
+                        Self::replay_thread_fnc(sniffer, arp_request, should_exit.as_ref())
+                    })
+                    .expect("failed to spawn replayer thread"),
+            )
         };
 
         let acceptor_thread = {
@@ -138,15 +143,20 @@ impl ARPSampleSupplier {
 
             let sample_queue = sample_queue.clone();
             let should_exit = should_exit.clone();
-            Some(std::thread::spawn(move || {
-                Self::acceptor_thread(
-                    sniffer,
-                    sample_queue.as_ref(),
-                    ap_mac,
-                    dev_mac,
-                    should_exit.as_ref(),
-                )
-            }))
+            Some(
+                std::thread::Builder::new()
+                    .name("ARP acceptor thread".into())
+                    .spawn(move || {
+                        Self::acceptor_thread(
+                            sniffer,
+                            sample_queue.as_ref(),
+                            ap_mac,
+                            dev_mac,
+                            should_exit.as_ref(),
+                        )
+                    })
+                    .expect("failed to spawn acceptor thread"),
+            )
         };
 
         ARPSampleSupplier {

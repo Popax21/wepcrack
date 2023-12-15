@@ -52,7 +52,10 @@ impl KeyCrackerThread {
         let thread = {
             let should_exit = should_exit.clone();
             let state = state.clone();
-            std::thread::spawn(move || Self::cracker_thread_func(&should_exit, &state))
+            std::thread::Builder::new()
+                .name("key cracker thread".into())
+                .spawn(move || Self::cracker_thread_func(&should_exit, &state))
+                .expect("failed to spawn cracker thread")
         };
 
         KeyCrackerThread {
