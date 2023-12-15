@@ -126,9 +126,9 @@ impl AppState {
         const KEYCRACK_SETTINGS: KeyCrackerSettings = KeyCrackerSettings {
             key_predictor_normal_threshold: 0.075,
             key_predictor_strong_threshold: 0.025,
-            num_test_samples: 121,
+            num_test_samples: 1024,
             test_sample_period: 128,
-            test_sample_threshold: 0.9,
+            test_sample_threshold: 0.7,
         };
 
         self.new_scene = Some(Box::new(ui::keycracker::UIKeyCracker::new(
