@@ -101,7 +101,7 @@ impl UIWidget<'_> for UITargetDeviceList {
         let mut devs = target_mon.get_sniffed_devices();
         devs.sort_by_key(|ap| -ap.strength_dbm());
 
-        if self.selected_dev_mac.is_nil() && devs.len() > 0 {
+        if self.selected_dev_mac.is_nil() && !devs.is_empty() {
             self.selected_dev_mac = *devs[0].mac_address();
         }
 

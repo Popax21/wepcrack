@@ -101,7 +101,7 @@ impl UIWidget<'_> for UIAccessPointList {
         let mut aps = target_mon.get_sniffed_aps();
         aps.sort_by_key(|ap| -ap.strength_dbm());
 
-        if self.selected_ap_mac.is_nil() && aps.len() > 0 {
+        if self.selected_ap_mac.is_nil() && !aps.is_empty() {
             self.selected_ap_mac = *aps[0].mac_address();
         }
 

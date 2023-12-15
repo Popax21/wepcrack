@@ -360,7 +360,7 @@ fn sniffer_thread_func(
                 sniff_ap_packet(&mut sniffer, access_points)
             }
             TargetSnifferMode::Devices { ap_mac, devices } => {
-                sniff_dev_packet(&mut sniffer, &ap_mac, devices)
+                sniff_dev_packet(&mut sniffer, ap_mac, devices)
             }
         }
     }
