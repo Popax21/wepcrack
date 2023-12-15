@@ -1,4 +1,4 @@
-use std::{io::Read, rc::Rc};
+use std::{io::Read, rc::Rc, time::Duration};
 
 use anyhow::Context;
 use libc::{sockaddr_ll, sockaddr_storage, AF_PACKET, ETH_P_ALL, SOCK_RAW};
@@ -26,8 +26,6 @@ pub struct IEEE80211Monitor {
 
     orig_interfaces: Vec<NL80211Interface>,
     mon_interface: NL80211Interface,
-
-    packet_socket: Socket,
 }
 
 impl IEEE80211Monitor {
@@ -95,29 +93,6 @@ impl IEEE80211Monitor {
             .get_permitted_channels()
             .collect();
 
-        //Create and bind the packet capture socket
-        let packet_socket = Socket::new(Domain::from(AF_PACKET), Type::from(SOCK_RAW), None)
-            .context("failed to create AF_PACKET socket")?;
-
-        let mut sockaddr: sockaddr_storage = unsafe { std::mem::zeroed() };
-
-        unsafe {
-            //Setup the bind address
-            *std::mem::transmute::<_, &mut sockaddr_ll>(&mut sockaddr) = sockaddr_ll {
-                sll_family: AF_PACKET as u16,
-                sll_protocol: (ETH_P_ALL as u16).to_be(),
-                sll_ifindex: mon_interface.index() as i32,
-                sll_hatype: 0,
-                sll_pkttype: 0,
-                sll_halen: 0,
-                sll_addr: [0u8; 8],
-            };
-        }
-
-        packet_socket
-            .bind(&unsafe { SockAddr::new(sockaddr, std::mem::size_of::<sockaddr_ll>() as u32) })
-            .context("failed to bind the PF_PACKET socket to the monitor interface")?;
-
         //Disarm drop guards
         mon_guard.disarm();
         orig_iface_guard.disarm();
@@ -132,8 +107,6 @@ impl IEEE80211Monitor {
 
             orig_interfaces,
             mon_interface,
-
-            packet_socket,
         })
     }
 
@@ -145,16 +118,31 @@ impl IEEE80211Monitor {
         self.mon_interface.set_channel(&channel, &self.nl802111_con)
     }
 
-    pub fn sniff_packet(&mut self) -> anyhow::Result<IEEE80211Packet> {
-        //Receive a packet from the socket
-        let mut rx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
-        let rx_size = self
-            .packet_socket
-            .read(&mut rx_buf)
-            .context("failed to read packet from packet socket")?;
+    pub fn create_sniffer(&self) -> anyhow::Result<IEEE80211PacketSniffer> {
+        //Create and bind a packet capture socket
+        let packet_socket = Socket::new(Domain::from(AF_PACKET), Type::from(SOCK_RAW), None)
+            .context("failed to create AF_PACKET socket")?;
 
-        Ok(IEEE80211Packet::try_from(&rx_buf[..rx_size])
-            .context("failed to parse IEEE 802.11 packet")?)
+        let mut sockaddr: sockaddr_storage = unsafe { std::mem::zeroed() };
+
+        unsafe {
+            //Setup the bind address
+            *std::mem::transmute::<_, &mut sockaddr_ll>(&mut sockaddr) = sockaddr_ll {
+                sll_family: AF_PACKET as u16,
+                sll_protocol: (ETH_P_ALL as u16).to_be(),
+                sll_ifindex: self.mon_interface.index() as i32,
+                sll_hatype: 0,
+                sll_pkttype: 0,
+                sll_halen: 0,
+                sll_addr: [0u8; 8],
+            };
+        }
+
+        packet_socket
+            .bind(&unsafe { SockAddr::new(sockaddr, std::mem::size_of::<sockaddr_ll>() as u32) })
+            .context("failed to bind the PF_PACKET socket to the monitor interface")?;
+
+        Ok(IEEE80211PacketSniffer(packet_socket))
     }
 }
 
@@ -180,6 +168,38 @@ impl Drop for IEEE80211Monitor {
         })() {
             eprintln!("failed to revert back wiphy after exiting monitor state: {err:?}")
         }
+    }
+}
+
+pub struct IEEE80211PacketSniffer(Socket);
+
+impl IEEE80211PacketSniffer {
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) -> anyhow::Result<()> {
+        self.0
+            .set_read_timeout(timeout)
+            .context("failed to set 802.11 sniffer socket read timeout")?;
+        self.0
+            .set_write_timeout(timeout)
+            .context("failed to set 802.11 sniffer socket write timeout")?;
+        Ok(())
+    }
+
+    pub fn sniff_packet(&mut self) -> anyhow::Result<Option<IEEE80211Packet>> {
+        //Receive a packet from the socket
+        let mut rx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
+
+        let rx_size = match self.0.read(&mut rx_buf) {
+            Ok(rx_size) => rx_size,
+            Err(err) if err.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
+            Err(err) => {
+                return Err(anyhow::anyhow!(err).context("failed to read packet from packet socket"))
+            }
+        };
+
+        Ok(Some(
+            IEEE80211Packet::try_from(&rx_buf[..rx_size])
+                .context("failed to parse 802.11 packet")?,
+        ))
     }
 }
 

@@ -53,10 +53,10 @@ impl AppState {
                 };
                 let mut state = state.borrow_mut();
 
-                //Create the IEEE 802.11 monitor
+                //Create the 802.11 monitor
                 state.ieee80211_mon = Some(Rc::new(
                     IEEE80211Monitor::enter_monitor_mode(state.nl80211_con.clone(), wiphy)
-                        .expect("failed to create IEEE 802.11 monitor"),
+                        .expect("failed to create 802.11 monitor"),
                 ));
 
                 //Switch the scene to the target selector
@@ -70,7 +70,7 @@ impl AppState {
         let ieee80211_mon = self
             .ieee80211_mon
             .as_ref()
-            .expect("no IEEE 802.11 monitor has been created")
+            .expect("no 802.11 monitor has been created")
             .clone();
 
         let state_ref = self.state_ref.clone();

@@ -8,11 +8,15 @@ use crate::{
     ui::{draw_ui_widgets, ConfirmationWidget, UIScene},
 };
 
-use super::{TargetMonitor, UIChannelSelect};
+use super::{TargetMonitor, UIAccessPointList, UIChannelSelect};
 
 pub enum TargetSelectState {
     ChannelSelect {
-        channel_sel_widget: UIChannelSelect,
+        channel_list_widget: UIChannelSelect,
+        confirmation_widget: Option<ConfirmationWidget<'static, TargetMonitor>>,
+    },
+    APSelect {
+        ap_list_widget: UIAccessPointList,
         confirmation_widget: Option<ConfirmationWidget<'static, TargetMonitor>>,
     },
 }
@@ -20,7 +24,14 @@ pub enum TargetSelectState {
 impl TargetSelectState {
     pub fn channel_select(monitor: &TargetMonitor) -> TargetSelectState {
         Self::ChannelSelect {
-            channel_sel_widget: UIChannelSelect::new(monitor),
+            channel_list_widget: UIChannelSelect::new(monitor),
+            confirmation_widget: None,
+        }
+    }
+
+    pub fn ap_select(monitor: &TargetMonitor) -> TargetSelectState {
+        Self::APSelect {
+            ap_list_widget: UIAccessPointList::new(monitor),
             confirmation_widget: None,
         }
     }
@@ -45,14 +56,14 @@ impl UITargetSelect {
 
 impl UIScene for UITargetSelect {
     fn should_quit(&self) -> bool {
-        false
+        self.monitor.did_crash()
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) {
         //Draw different widgets depending on the current state
         match &mut self.state {
             TargetSelectState::ChannelSelect {
-                channel_sel_widget,
+                channel_list_widget: channel_sel_widget,
                 confirmation_widget,
             } => {
                 //Draw channel select widgets
@@ -67,6 +78,23 @@ impl UIScene for UITargetSelect {
                     draw_ui_widgets(&mut [channel_sel_widget], &self.monitor, frame, area);
                 }
             }
+
+            TargetSelectState::APSelect {
+                ap_list_widget: ap_sel_widget,
+                confirmation_widget,
+            } => {
+                //Draw access point select widgets
+                if let Some(confirmation_widget) = confirmation_widget {
+                    draw_ui_widgets(
+                        &mut [ap_sel_widget, confirmation_widget],
+                        &self.monitor,
+                        frame,
+                        area,
+                    );
+                } else {
+                    draw_ui_widgets(&mut [ap_sel_widget], &self.monitor, frame, area);
+                }
+            }
         }
     }
 
@@ -74,7 +102,7 @@ impl UIScene for UITargetSelect {
         //Run different event handlers depending on the current state
         match &mut self.state {
             TargetSelectState::ChannelSelect {
-                channel_sel_widget,
+                channel_list_widget: channel_sel_widget,
                 confirmation_widget: confirmation_widget_opt,
             } => {
                 //Handle channel select inputs
@@ -86,8 +114,11 @@ impl UIScene for UITargetSelect {
                                 .set_channel(*channel_sel_widget.selected_channel(&self.monitor))
                                 .expect("failed to set active channel");
 
-                            //Move onto the actual target selection
-                            self.state = TargetSelectState::channel_select(&self.monitor);
+                            //Start sniffing APs
+                            self.monitor.sniff_aps();
+
+                            //Move onto selecting the access point
+                            self.state = TargetSelectState::ap_select(&self.monitor);
                         } else {
                             *confirmation_widget_opt = None;
                         }
@@ -104,6 +135,25 @@ impl UIScene for UITargetSelect {
                     }
 
                     channel_sel_widget.handle_event(&self.monitor, event);
+                }
+            }
+
+            TargetSelectState::APSelect {
+                ap_list_widget: ap_sel_widget,
+                confirmation_widget: confirmation_widget_opt,
+            } => {
+                //Handle access point select inputs
+                if let Some(confirmation_widget) = confirmation_widget_opt {
+                    if let Some(confirm_res) = confirmation_widget.handle_event(event) {
+                        if confirm_res {
+                            todo!();
+                        } else {
+                            *confirmation_widget_opt = None;
+                        }
+                    }
+                } else {
+                    //Ask for confirmation upon pressing enter
+                    ap_sel_widget.handle_event(&self.monitor, event);
                 }
             }
         }
