@@ -93,7 +93,12 @@ impl UIWidget<'_> for SigmaInfoWidget {
             let info_list_item = ListItem::new(Line::from(info_line));
 
             //Change the background color for predictions past the threshold
-            let info_list_item = if prediction_score >= cracker.settings().key_predictor_threshold {
+            let info_list_item = if prediction_score
+                >= if matches!(prediction, KeyBytePrediction::Normal { sigma: _ }) {
+                    cracker.settings().key_predictor_normal_threshold
+                } else {
+                    cracker.settings().key_predictor_strong_threshold
+                } {
                 match prediction {
                     KeyBytePrediction::Normal { sigma: _ } => info_list_item.on_light_magenta(),
                     KeyBytePrediction::Strong => info_list_item.on_light_cyan(),

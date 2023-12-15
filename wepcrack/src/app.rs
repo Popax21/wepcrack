@@ -124,9 +124,10 @@ impl AppState {
     fn keycrack(&mut self, mut sample_prov: ARPSampleSupplier) {
         //Switch the scene to the key cracking scene
         const KEYCRACK_SETTINGS: KeyCrackerSettings = KeyCrackerSettings {
-            key_predictor_threshold: 0.35,
-            num_test_samples: 2048,
-            test_sample_period: 512,
+            key_predictor_normal_threshold: 0.075,
+            key_predictor_strong_threshold: 0.025,
+            num_test_samples: 121,
+            test_sample_period: 128,
             test_sample_threshold: 0.9,
         };
 

@@ -98,10 +98,9 @@ impl UIScene for UIAttackPrep {
                 if attempt == usize::MAX {
                     if let Some(cb) = self.callback.take() {
                         cb(ARPSampleSupplier::new(
-                            self.monitor
-                                .create_sniffer()
-                                .expect("failed to create sniffer for ARP sample supplier"),
+                            self.monitor.clone(),
                             self.dev_mac,
+                            self.ap_mac,
                             self.thread.take().unwrap().join().unwrap(),
                         ))
                     }

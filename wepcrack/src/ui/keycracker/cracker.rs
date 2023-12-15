@@ -1,14 +1,15 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
 use crate::{
-    keycracker::{KeyPredictor, KeyTester, KeystreamSample, TestSampleBuffer},
+    keycracker::{KeyBytePrediction, KeyPredictor, KeyTester, KeystreamSample, TestSampleBuffer},
     wep::WepKey,
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyCrackerSettings {
     //Sample collection settings
-    pub key_predictor_threshold: f64,
+    pub key_predictor_normal_threshold: f64,
+    pub key_predictor_strong_threshold: f64,
 
     //Test buffer settings
     pub num_test_samples: usize,
@@ -106,7 +107,16 @@ impl KeyCracker {
                     .key_byte_infos()
                     .iter()
                     .map(|info| {
-                        (info.prediction_score() / self.settings.key_predictor_threshold).min(1.)
+                        (info.prediction_score()
+                            / (if matches!(
+                                info.prediction(),
+                                KeyBytePrediction::Normal { sigma: _ }
+                            ) {
+                                self.settings.key_predictor_normal_threshold
+                            } else {
+                                self.settings.key_predictor_strong_threshold
+                            }))
+                        .min(1.)
                     })
                     .sum::<f64>()
                     / self.key_predictor.key_byte_infos().len() as f64
@@ -124,7 +134,9 @@ impl KeyCracker {
         match self.phase {
             KeyCrackerPhase::SampleCollection => {
                 //Collect a sample and feed it to the predictor and test sample buffer
-                let sample = (self.sample_provider)(self.should_exit.as_ref()).unwrap();
+                let Some(sample) = (self.sample_provider)(self.should_exit.as_ref()) else {
+                    return;
+                };
                 self.key_predictor.accept_sample(&sample);
                 self.test_sample_buf.accept_sample(&sample);
 
@@ -137,7 +149,15 @@ impl KeyCracker {
 
                     if self.test_sample_buf.is_full()
                         && self.key_predictor.key_byte_infos().iter().all(|info| {
-                            info.prediction_score() >= self.settings.key_predictor_threshold
+                            info.prediction_score()
+                                >= if matches!(
+                                    info.prediction(),
+                                    KeyBytePrediction::Normal { sigma: _ }
+                                ) {
+                                    self.settings.key_predictor_normal_threshold
+                                } else {
+                                    self.settings.key_predictor_strong_threshold
+                                }
                         })
                     {
                         //Move onto testing candidate keys

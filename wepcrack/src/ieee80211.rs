@@ -211,11 +211,17 @@ impl IEEE80211PacketSniffer {
     }
 
     pub fn inject_frame(&mut self, frame: &impl ieee80211::FrameTrait) -> anyhow::Result<()> {
+        const IEEE80211_RADIOTAP_TX_FLAGS: u32 = 15;
+        const IEEE80211_RADIOTAP_F_TX_NOACK: u16 = 0x8;
+
         //Send the packet through the socket
         let mut tx_buf = [0u8; IEEE80211Packet::MAX_SIZE];
-        let tx_len = 8 + frame.bytes().len();
-        tx_buf[2..4].copy_from_slice(&8u16.to_le_bytes());
-        tx_buf[8..tx_len].copy_from_slice(frame.bytes());
+        let tx_len = 10 + frame.bytes().len();
+        tx_buf[2..4].copy_from_slice(&10u16.to_le_bytes());
+        tx_buf[4..8].copy_from_slice(&((1 << IEEE80211_RADIOTAP_TX_FLAGS) as u32).to_le_bytes());
+        tx_buf[8..10].copy_from_slice(&IEEE80211_RADIOTAP_F_TX_NOACK.to_le_bytes());
+
+        tx_buf[10..tx_len].copy_from_slice(frame.bytes());
 
         let tx_size = 'tx_loop: loop {
             match self.0.send(&tx_buf[..tx_len]) {

